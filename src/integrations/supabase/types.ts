@@ -9,7 +9,81 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      campaigns: {
+        Row: {
+          amount_collected: number
+          created_at: string
+          creator_id: string
+          deadline: string
+          description: string
+          documents: string[] | null
+          id: string
+          image_url: string | null
+          is_verified: boolean | null
+          target_amount: number
+          title: string
+          verified_at: string | null
+          verified_by: string | null
+          videos: string[] | null
+        }
+        Insert: {
+          amount_collected?: number
+          created_at?: string
+          creator_id: string
+          deadline: string
+          description: string
+          documents?: string[] | null
+          id?: string
+          image_url?: string | null
+          is_verified?: boolean | null
+          target_amount: number
+          title: string
+          verified_at?: string | null
+          verified_by?: string | null
+          videos?: string[] | null
+        }
+        Update: {
+          amount_collected?: number
+          created_at?: string
+          creator_id?: string
+          deadline?: string
+          description?: string
+          documents?: string[] | null
+          id?: string
+          image_url?: string | null
+          is_verified?: boolean | null
+          target_amount?: number
+          title?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          videos?: string[] | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          is_admin: boolean | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          is_admin?: boolean | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_admin?: boolean | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
