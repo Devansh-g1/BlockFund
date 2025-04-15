@@ -17,28 +17,28 @@ interface CampaignCardProps {
 const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
   const progress = calculateProgress(campaign.amountCollected, campaign.target);
   const timeRemaining = calculateTimeRemaining(campaign.deadline);
-  const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
+  const [isGovVerified, setIsGovVerified] = useState<boolean>(false);
   
   useEffect(() => {
-    const fetchCreatorEmail = async () => {
+    const fetchCreatorInfo = async () => {
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', campaign.owner)
-          .single();
+        // Get the user information from auth.users through the admin API
+        const { data: userData, error: userError } = await supabase.auth
+          .admin.getUserById(campaign.owner);
           
-        if (error) throw error;
-        setCreatorEmail(data?.email || null);
+        if (userError) throw userError;
+        
+        // Check if email ends with @gov.in
+        const userEmail = userData?.user?.email || '';
+        setIsGovVerified(userEmail.endsWith('@gov.in'));
       } catch (error) {
-        console.error('Error fetching creator email:', error);
+        console.error('Error fetching creator info:', error);
+        setIsGovVerified(false);
       }
     };
     
-    fetchCreatorEmail();
+    fetchCreatorInfo();
   }, [campaign.owner]);
-  
-  const isGovVerified = creatorEmail?.endsWith('@gov.in') || false;
 
   return (
     <Link to={`/campaign/${campaign.id}`}>
