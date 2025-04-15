@@ -3,14 +3,16 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useWeb3 } from '@/context/Web3Context';
+import { useWeb3Extended } from '@/context/Web3ContextExtended';
 import { supabase } from '@/integrations/supabase/client';
 import { useTheme } from '@/hooks/use-theme';
 import { truncateAddress } from '@/utils/contractUtils';
-import { Moon, Sun, User, LogOut, LogIn } from 'lucide-react';
+import { Moon, Sun, User, LogOut, LogIn, Plus } from 'lucide-react';
 
 const Header = () => {
   const navigate = useNavigate();
-  const { connectWallet, isConnected, address, balance, isVerifiedCreator } = useWeb3();
+  const { connectWallet, isConnected, address, balance } = useWeb3();
+  const { isVerifiedCreator, isSuperVerified } = useWeb3Extended();
   const { theme, toggleTheme } = useTheme();
 
   const handleSignOut = async () => {
@@ -34,17 +36,24 @@ const Header = () => {
           <Link to="/" className="text-foreground hover:text-primary font-medium">
             Campaigns
           </Link>
-          {isConnected && isVerifiedCreator && (
-            <Link to="/create-campaign" className="text-foreground hover:text-primary font-medium">
-              Create Campaign
-            </Link>
-          )}
           <Link to="/about" className="text-foreground hover:text-primary font-medium">
             About
           </Link>
         </nav>
 
         <div className="flex items-center space-x-4">
+          {isConnected && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hidden sm:flex items-center gap-2"
+              onClick={() => navigate('/create-campaign')}
+            >
+              <Plus className="h-4 w-4" />
+              Create Campaign
+            </Button>
+          )}
+          
           <Button 
             variant="ghost" 
             size="icon" 
@@ -62,9 +71,12 @@ const Header = () => {
               <Button 
                 variant="outline" 
                 size="sm" 
-                className="hidden sm:flex"
+                className="hidden sm:flex items-center gap-1"
                 onClick={() => navigate('/profile')}
               >
+                {isSuperVerified && (
+                  <span className="bg-green-500 text-white text-xs px-1 rounded">Gov</span>
+                )}
                 {truncateAddress(address || '')}
               </Button>
               <Button 

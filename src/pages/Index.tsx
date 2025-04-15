@@ -1,41 +1,49 @@
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
+import { useWeb3Extended } from '@/context/Web3ContextExtended';
 import { Campaign } from '@/types/campaign';
 import CampaignCard from '@/components/CampaignCard';
 import Header from '@/components/Header';
-import { formatCampaign } from '@/utils/contractUtils';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2, AlertCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Index = () => {
-  const { contract, connectWallet, isConnected } = useWeb3();
+  const navigate = useNavigate();
+  const { isConnected } = useWeb3();
+  const { fetchCampaigns } = useWeb3Extended();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [activeTab, setActiveTab] = useState<string>('all');
 
-  // Fetch campaigns from the contract
-  const fetchCampaigns = async () => {
+  // Fetch campaigns from Supabase
+  const loadCampaigns = async () => {
     try {
       setLoading(true);
+      const campaignData = await fetchCampaigns();
       
-      if (!contract) {
-        setError('Please connect your wallet to view campaigns');
-        setLoading(false);
-        return;
-      }
-      
-      // Call the contract's getCampaigns method
-      const campaignData = await contract.getCampaigns();
-      
-      // Format the campaign data
-      const formattedCampaigns = campaignData.map((campaign: any, i: number) => 
-        formatCampaign(campaign, i)
-      );
+      // Transform the data to match our Campaign type
+      const formattedCampaigns = campaignData.map((campaign: any) => ({
+        id: campaign.id,
+        owner: campaign.creator_id,
+        title: campaign.title,
+        description: campaign.description,
+        target: campaign.target_amount.toString(),
+        deadline: new Date(campaign.deadline).getTime() / 1000,
+        amountCollected: campaign.amount_collected.toString(),
+        image: campaign.image_url || '',
+        documents: campaign.documents || [],
+        videos: campaign.videos || [],
+        donors: [], // This would need to be fetched from a separate table
+        donations: [], // This would need to be fetched from a separate table
+        isVerified: campaign.is_verified
+      }));
       
       setCampaigns(formattedCampaigns);
       setError(null);
@@ -47,72 +55,26 @@ const Index = () => {
     }
   };
 
-  // Connect wallet and fetch campaigns on mount
+  // Set up real-time subscription
   useEffect(() => {
-    const init = async () => {
-      if (isConnected && contract) {
-        await fetchCampaigns();
-      } else {
-        // If no real data is loaded, use mock data for demo
-        setLoading(true);
-        setTimeout(() => {
-          // Mock campaigns for development
-          const mockCampaigns: Campaign[] = [
-            {
-              id: 0,
-              owner: '0x1234567890123456789012345678901234567890',
-              title: 'Clean Water Initiative',
-              description: 'Help us provide clean water to rural communities in need.',
-              target: '5',
-              deadline: Math.floor(Date.now() / 1000) + 2592000, // 30 days from now
-              amountCollected: '2.5',
-              image: 'https://images.unsplash.com/photo-1519593135389-e4145968f52d',
-              documents: ['https://ipfs.io/ipfs/QmDocument1'],
-              videos: ['https://ipfs.io/ipfs/QmVideo1'],
-              donors: ['0xDonor1', '0xDonor2', '0xDonor3'],
-              donations: ['1.2', '0.8', '0.5'],
-              isVerified: true
-            },
-            {
-              id: 1,
-              owner: '0x2345678901234567890123456789012345678901',
-              title: 'Community Food Bank',
-              description: 'Support our local food bank to help families in need during these challenging times.',
-              target: '3',
-              deadline: Math.floor(Date.now() / 1000) + 1296000, // 15 days from now
-              amountCollected: '0.9',
-              image: 'https://images.unsplash.com/photo-1593113646773-028c64a8f1b8',
-              documents: ['https://ipfs.io/ipfs/QmDocument2'],
-              videos: [],
-              donors: ['0xDonor4', '0xDonor5'],
-              donations: ['0.5', '0.4'],
-              isVerified: false
-            },
-            {
-              id: 2,
-              owner: '0x3456789012345678901234567890123456789012',
-              title: 'Education for All',
-              description: 'Help us provide educational resources to underprivileged children around the world.',
-              target: '10',
-              deadline: Math.floor(Date.now() / 1000) + 864000, // 10 days from now
-              amountCollected: '7.2',
-              image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b',
-              documents: ['https://ipfs.io/ipfs/QmDocument3', 'https://ipfs.io/ipfs/QmDocument4'],
-              videos: ['https://ipfs.io/ipfs/QmVideo2'],
-              donors: ['0xDonor6', '0xDonor7', '0xDonor8', '0xDonor9', '0xDonor10'],
-              donations: ['2.0', '1.5', '1.2', '1.5', '1.0'],
-              isVerified: true
-            }
-          ];
-          
-          setCampaigns(mockCampaigns);
-          setLoading(false);
-        }, 1500);
-      }
+    loadCampaigns();
+    
+    // Subscribe to changes
+    const channel = supabase
+      .channel('public:campaigns')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'campaigns' 
+      }, () => {
+        loadCampaigns();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
     };
-
-    init();
-  }, [contract, isConnected]);
+  }, []);
 
   // Filter campaigns based on search term and active tab
   const filteredCampaigns = campaigns.filter(campaign => {
@@ -134,7 +96,7 @@ const Index = () => {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background text-foreground">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -143,17 +105,26 @@ const Index = () => {
             <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
               Decentralized Crowdfunding
             </h1>
-            <p className="text-lg text-gray-600 mb-8">
+            <p className="text-lg text-muted-foreground mb-8">
               Empowering verified campaigners to raise funds transparently through blockchain, while enabling secure donations.
             </p>
             
-            {!isConnected && (
+            {!isConnected ? (
               <Button 
-                onClick={connectWallet} 
+                onClick={() => navigate('/auth')} 
                 size="lg" 
                 className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
               >
-                Connect Wallet to Start
+                Connect to Start
+              </Button>
+            ) : (
+              <Button 
+                onClick={() => navigate('/create-campaign')} 
+                size="lg" 
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+              >
+                <Plus className="mr-2 h-5 w-5" />
+                Host a Campaign
               </Button>
             )}
           </div>
@@ -181,37 +152,52 @@ const Index = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 className="h-10 w-10 text-indigo-600 animate-spin mb-4" />
-              <p className="text-gray-600">Loading campaigns...</p>
+              <p className="text-muted-foreground">Loading campaigns...</p>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
-              <p className="text-gray-800 font-medium mb-2">{error}</p>
-              <Button onClick={connectWallet} variant="outline">
+              <p className="text-foreground font-medium mb-2">{error}</p>
+              <Button onClick={() => navigate('/auth')} variant="outline">
                 Connect Wallet
               </Button>
             </div>
           ) : filteredCampaigns.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <p className="text-gray-600 mb-4">No campaigns found</p>
-              {searchTerm && (
+              <p className="text-muted-foreground mb-4">No campaigns found</p>
+              {searchTerm ? (
                 <Button onClick={() => setSearchTerm('')} variant="outline">
                   Clear Search
+                </Button>
+              ) : isConnected ? (
+                <Button 
+                  onClick={() => navigate('/create-campaign')} 
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Host the First Campaign
+                </Button>
+              ) : (
+                <Button 
+                  onClick={() => navigate('/auth')} 
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                >
+                  Connect to Start
                 </Button>
               )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCampaigns.map((campaign) => (
-                <CampaignCard key={campaign.id} campaign={campaign} />
+                <CampaignCard key={campaign.id.toString()} campaign={campaign} />
               ))}
             </div>
           )}
         </section>
       </main>
       
-      <footer className="bg-gray-100 py-8 border-t border-gray-200">
-        <div className="container mx-auto px-4 text-center text-gray-600">
+      <footer className="border-t border-border py-8 bg-muted/30">
+        <div className="container mx-auto px-4 text-center text-muted-foreground">
           <p className="mb-2">BlockFund - Decentralized Crowdfunding Platform</p>
           <p className="text-sm">Built with React, TypeScript, and Smart Contracts on Holesky Testnet</p>
         </div>
