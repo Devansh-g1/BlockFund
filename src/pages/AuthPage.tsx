@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -15,6 +14,17 @@ const AuthPage = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        navigate('/profile');
+      }
+    };
+    
+    checkSession();
+  }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +49,12 @@ const AuthPage = () => {
           description: 'Please check your email to confirm your account.',
           variant: 'default'
         });
+        
+        if (data.session) {
+          navigate('/profile');
+        }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error, data } = await supabase.auth.signInWithPassword({
           email,
           password
         });
@@ -52,7 +66,8 @@ const AuthPage = () => {
           description: 'Welcome back to BlockFund!',
           variant: 'default'
         });
-        navigate('/');
+        
+        navigate('/profile');
       }
     } catch (error: any) {
       toast({

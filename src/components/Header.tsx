@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useWeb3 } from '@/context/Web3Context';
@@ -7,13 +7,85 @@ import { useWeb3Extended } from '@/context/Web3ContextExtended';
 import { supabase } from '@/integrations/supabase/client';
 import { useTheme } from '@/hooks/use-theme';
 import { truncateAddress } from '@/utils/contractUtils';
-import { Moon, Sun, User, LogOut, LogIn, Plus } from 'lucide-react';
+import { 
+  Moon, 
+  Sun, 
+  User, 
+  LogOut, 
+  LogIn, 
+  Plus, 
+  ChevronDown,
+  Wallet,
+  DollarSign,
+  Target 
+} from 'lucide-react';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const Header = () => {
   const navigate = useNavigate();
   const { connectWallet, isConnected, address, balance } = useWeb3();
   const { isVerifiedCreator, isSuperVerified } = useWeb3Extended();
   const { theme, toggleTheme } = useTheme();
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // Check if user is logged in and fetch profile data
+    const fetchUserData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        setIsUserLoggedIn(true);
+        
+        // Fetch profile data
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (profileData) {
+          setUserProfile(profileData);
+        }
+      } else {
+        setIsUserLoggedIn(false);
+        setUserProfile(null);
+      }
+    };
+
+    fetchUserData();
+    
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session) {
+          setIsUserLoggedIn(true);
+          fetchUserData();
+        } else {
+          setIsUserLoggedIn(false);
+          setUserProfile(null);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleConnectWallet = async () => {
+    if (!isUserLoggedIn) {
+      navigate('/auth');
+      return;
+    }
+    
+    await connectWallet();
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -42,7 +114,7 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center space-x-4">
-          {isConnected && (
+          {isConnected && isUserLoggedIn && (
             <Button 
               variant="outline" 
               size="sm" 
@@ -63,30 +135,76 @@ const Header = () => {
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
-          {isConnected ? (
+          {isUserLoggedIn ? (
             <div className="flex items-center space-x-3">
-              <span className="hidden md:block text-sm font-medium text-foreground">
-                {parseFloat(balance).toFixed(4)} ETH
-              </span>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="hidden sm:flex items-center gap-1"
-                onClick={() => navigate('/profile')}
-              >
-                {isSuperVerified && (
-                  <span className="bg-green-500 text-white text-xs px-1 rounded">Gov</span>
-                )}
-                {truncateAddress(address || '')}
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={handleSignOut}
-                className="text-destructive hover:bg-destructive/10"
-              >
-                <LogOut className="h-5 w-5" />
-              </Button>
+              {/* Profile dropdown menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative p-0 h-8 w-8 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      {userProfile?.avatar_url ? (
+                        <AvatarImage src={userProfile.avatar_url} alt={userProfile.display_name || 'User'} />
+                      ) : (
+                        <AvatarFallback className="bg-primary/10 text-primary">
+                          {userProfile?.display_name?.charAt(0).toUpperCase() || 'U'}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <div className="flex flex-col p-2">
+                    <p className="text-sm font-medium">{userProfile?.display_name || 'User'}</p>
+                    <p className="text-xs text-muted-foreground">Profile</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="flex items-center gap-2" onClick={() => navigate('/profile')}>
+                    <User className="h-4 w-4" />
+                    <span>My Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex items-center gap-2" onClick={() => navigate('/profile')}>
+                    <Target className="h-4 w-4" />
+                    <span>My Campaigns ({userProfile?.campaigns_created || 0})</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex items-center gap-2" onClick={() => navigate('/profile')}>
+                    <DollarSign className="h-4 w-4" />
+                    <span>Donations (${userProfile?.total_donated?.toFixed(2) || '0.00'})</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="flex items-center gap-2" onClick={handleSignOut}>
+                    <LogOut className="h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Wallet connection status */}
+              {isConnected ? (
+                <div className="flex items-center space-x-3">
+                  <span className="hidden md:block text-sm font-medium text-foreground">
+                    {parseFloat(balance).toFixed(4)} ETH
+                  </span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="hidden sm:flex items-center gap-1"
+                  >
+                    {isSuperVerified && (
+                      <span className="bg-green-500 text-white text-xs px-1 rounded">Gov</span>
+                    )}
+                    {truncateAddress(address || '')}
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  onClick={handleConnectWallet} 
+                  variant="default" 
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Connect Wallet
+                </Button>
+              )}
             </div>
           ) : (
             <Button 
@@ -95,7 +213,7 @@ const Header = () => {
               className="bg-primary hover:bg-primary/90"
             >
               <LogIn className="mr-2 h-4 w-4" />
-              Connect
+              Sign In
             </Button>
           )}
         </div>
