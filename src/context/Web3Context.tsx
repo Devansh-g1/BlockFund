@@ -1,7 +1,8 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import BlockFundABI from '../contracts/BlockFundABI.json';
 
 // Define the type for the Ethereum object on window
@@ -58,12 +59,29 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [balance, setBalance] = useState<string>('0');
   const [chainId, setChainId] = useState<number | null>(null);
-
-  // Connect to MetaMask
+  
+  const { toast } = useToast();
+  
   const connectWallet = async () => {
     try {
+      // Check if user is authenticated with Supabase first
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: 'Login Required',
+          description: 'Please log in before connecting your wallet',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       if (!window.ethereum) {
-        alert('Please install MetaMask to use this dApp');
+        toast({
+          title: 'MetaMask Not Found',
+          description: 'Please install MetaMask to connect your wallet',
+          variant: 'destructive'
+        });
         return;
       }
 
@@ -140,7 +158,11 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error) {
       console.error('Error connecting to MetaMask', error);
-      alert('Error connecting to MetaMask. Check console for details.');
+      toast({
+        title: 'Wallet Connection Failed',
+        description: 'An error occurred while connecting your wallet',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }

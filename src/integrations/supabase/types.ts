@@ -60,27 +60,71 @@ export type Database = {
         }
         Relationships: []
       }
+      donations: {
+        Row: {
+          amount: number
+          campaign_id: string
+          created_at: string
+          donor_id: string
+          id: string
+        }
+        Insert: {
+          amount: number
+          campaign_id: string
+          created_at?: string
+          donor_id: string
+          id?: string
+        }
+        Update: {
+          amount?: number
+          campaign_id?: string
+          created_at?: string
+          donor_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "donations_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
+          campaigns_created: number | null
           created_at: string
           display_name: string | null
+          donations_made: number | null
           id: string
           is_admin: boolean | null
+          total_donated: number | null
+          total_raised: number | null
         }
         Insert: {
           avatar_url?: string | null
+          campaigns_created?: number | null
           created_at?: string
           display_name?: string | null
+          donations_made?: number | null
           id: string
           is_admin?: boolean | null
+          total_donated?: number | null
+          total_raised?: number | null
         }
         Update: {
           avatar_url?: string | null
+          campaigns_created?: number | null
           created_at?: string
           display_name?: string | null
+          donations_made?: number | null
           id?: string
           is_admin?: boolean | null
+          total_donated?: number | null
+          total_raised?: number | null
         }
         Relationships: []
       }
