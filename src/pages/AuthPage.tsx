@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -5,10 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { User, Lock, Mail } from 'lucide-react';
-
-// Import alternative icon from lucide-react
-import { LogIn } from 'lucide-react';
-const GoogleIcon = LogIn;
 
 const AuthPage = () => {
   const [email, setEmail] = useState('');
@@ -29,28 +26,6 @@ const AuthPage = () => {
     
     checkSession();
   }, [navigate]);
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin + '/profile'
-        }
-      });
-
-      if (error) throw error;
-    } catch (error: any) {
-      toast({
-        title: 'Google Sign In Error',
-        description: error.message,
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,28 +156,6 @@ const AuthPage = () => {
               ? (isSignup ? 'Creating Account...' : 'Signing In...') 
               : (isSignup ? 'Create Account' : 'Sign In')
             }
-          </Button>
-
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">
-                Or continue with
-              </span>
-            </div>
-          </div>
-
-          <Button 
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-          >
-            <GoogleIcon className="mr-2 h-5 w-5" />
-            Sign in with Google
           </Button>
         </form>
 

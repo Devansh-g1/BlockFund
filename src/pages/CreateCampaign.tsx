@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
@@ -12,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import FileUploader from '@/components/FileUploader';
 import { CampaignFormData } from '@/types/campaign';
 import { uploadFileToIPFS, uploadFilesToIPFS } from '@/utils/ipfsUtils';
-import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CreateCampaign = () => {
@@ -193,7 +192,7 @@ const CreateCampaign = () => {
         // Convert deadline to UNIX timestamp
         const deadlineTimestamp = dateToTimestamp(formData.deadline);
         
-        // Create campaign transaction
+        // Create campaign transaction with is_verified set to false
         const transaction = await contract.createCampaign(
           formData.title,
           formData.description,
@@ -209,7 +208,7 @@ const CreateCampaign = () => {
         
         toast({
           title: 'Campaign Created',
-          description: 'Your campaign has been successfully created',
+          description: 'Your campaign is now awaiting verification',
           variant: 'default'
         });
         
