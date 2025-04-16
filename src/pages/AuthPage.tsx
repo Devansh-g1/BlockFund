@@ -5,7 +5,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { User, Lock, Mail, Google } from 'lucide-react';
+import { User, Lock, Mail } from 'lucide-react';
+
+// Import LucideIcons dynamically
+import { icons } from 'lucide-react';
+const GoogleIcon = icons.Google || icons.LogIn;
 
 const AuthPage = () => {
   const [email, setEmail] = useState('');
@@ -198,7 +202,7 @@ const AuthPage = () => {
             onClick={handleGoogleSignIn}
             disabled={loading}
           >
-            <Google className="mr-2 h-5 w-5" />
+            <GoogleIcon className="mr-2 h-5 w-5" />
             Sign in with Google
           </Button>
         </form>

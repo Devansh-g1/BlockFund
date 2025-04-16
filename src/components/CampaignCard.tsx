@@ -42,7 +42,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
           const { data: donationData } = await supabase
             .from('donations')
             .select('*')
-            .eq('campaign_id', campaign.id)
+            .eq('campaign_id', campaign.id.toString())
             .eq('donor_id', user.id)
             .single();
 
@@ -51,7 +51,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
             const { data: voteData } = await supabase
               .from('campaign_verifications')
               .select('*')
-              .eq('campaign_id', campaign.id)
+              .eq('campaign_id', campaign.id.toString())
               .eq('voter_id', user.id)
               .single();
 
@@ -63,7 +63,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         const { data: userVoteData } = await supabase
           .from('campaign_verifications')
           .select('is_verified')
-          .eq('campaign_id', campaign.id)
+          .eq('campaign_id', campaign.id.toString())
           .eq('voter_id', user?.id || '')
           .single();
 
@@ -92,7 +92,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
       const { error } = await supabase
         .from('campaign_verifications')
         .insert({
-          campaign_id: campaign.id,
+          campaign_id: campaign.id.toString(),
           voter_id: user.id,
           is_verified: vote
         });
