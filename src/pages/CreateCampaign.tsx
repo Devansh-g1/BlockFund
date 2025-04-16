@@ -11,12 +11,12 @@ import { Label } from '@/components/ui/label';
 import FileUploader from '@/components/FileUploader';
 import { CampaignFormData } from '@/types/campaign';
 import { uploadFileToIPFS, uploadFilesToIPFS } from '@/utils/ipfsUtils';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CreateCampaign = () => {
   const navigate = useNavigate();
-  const { contract, address, isConnected, connectWallet, isVerifiedCreator } = useWeb3();
+  const { contract, address, isConnected, connectWallet } = useWeb3();
   const { toast } = useToast();
   
   const [formData, setFormData] = useState<CampaignFormData>({
@@ -136,15 +136,6 @@ const CreateCampaign = () => {
     
     if (!isConnected) {
       await connectWallet();
-      return;
-    }
-    
-    if (!isVerifiedCreator) {
-      toast({
-        title: 'Not Verified',
-        description: 'You must be a verified creator to create campaigns',
-        variant: 'destructive'
-      });
       return;
     }
     
@@ -272,7 +263,6 @@ const CreateCampaign = () => {
             
             {!isConnected ? (
               <div className="text-center py-8">
-                <AlertCircle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
                 <h2 className="text-xl font-medium mb-2">Connect Your Wallet</h2>
                 <p className="text-gray-600 mb-6">
                   You need to connect your wallet before creating a campaign
@@ -282,23 +272,6 @@ const CreateCampaign = () => {
                   className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
                 >
                   Connect Wallet
-                </Button>
-              </div>
-            ) : !isVerifiedCreator ? (
-              <div className="text-center py-8">
-                <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-                <h2 className="text-xl font-medium mb-2">Verification Required</h2>
-                <p className="text-gray-600 mb-2">
-                  Your account is not verified to create campaigns.
-                </p>
-                <p className="text-gray-600 mb-6">
-                  Contact the platform administrator to get verified.
-                </p>
-                <Button 
-                  onClick={() => navigate('/')} 
-                  variant="outline"
-                >
-                  Back to Home
                 </Button>
               </div>
             ) : (
