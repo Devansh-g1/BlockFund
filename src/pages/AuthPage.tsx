@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,9 +6,9 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { User, Lock, Mail } from 'lucide-react';
 
-// Import LucideIcons dynamically
-import { icons } from 'lucide-react';
-const GoogleIcon = icons.Google || icons.LogIn;
+// Import alternative icon from lucide-react
+import { LogIn } from 'lucide-react';
+const GoogleIcon = LogIn;
 
 const AuthPage = () => {
   const [email, setEmail] = useState('');
