@@ -6,11 +6,12 @@ import { Campaign } from '@/types/campaign';
 import CampaignCard from '@/components/CampaignCard';
 import Header from '@/components/Header';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, AlertCircle, Plus } from 'lucide-react';
+import { Loader2, AlertCircle, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent } from '@/components/ui/card';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ const Index = () => {
   const loadCampaigns = async () => {
     try {
       setLoading(true);
+      console.log('Fetching campaigns from Supabase...');
       
       // Get campaigns from Supabase
       const { data: campaignData, error: campaignError } = await supabase
@@ -34,10 +36,12 @@ const Index = () => {
         .order('created_at', { ascending: false });
       
       if (campaignError) {
+        console.error('Error fetching campaigns:', campaignError);
         throw campaignError;
       }
       
       if (!campaignData) {
+        console.log('No campaigns found');
         setCampaigns([]);
         return;
       }
@@ -124,7 +128,7 @@ const Index = () => {
       <main className="container mx-auto px-4 py-8">
         <section className="mb-10">
           <div className="flex flex-col items-center text-center max-w-3xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-indigo-500 bg-clip-text text-transparent">
               Decentralized Crowdfunding
             </h1>
             <p className="text-lg text-muted-foreground mb-8">
@@ -135,7 +139,7 @@ const Index = () => {
               <Button 
                 onClick={() => navigate('/auth')} 
                 size="lg" 
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                className="bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
               >
                 Connect to Start
               </Button>
@@ -143,7 +147,7 @@ const Index = () => {
               <Button 
                 onClick={() => navigate('/create-campaign')} 
                 size="lg" 
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                className="bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
               >
                 <Plus className="mr-2 h-5 w-5" />
                 Host a Campaign
@@ -154,60 +158,79 @@ const Index = () => {
         
         <section className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <Input
-              placeholder="Search campaigns..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-md"
-            />
+            <div className="flex-1 max-w-md">
+              <Input
+                placeholder="Search campaigns..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
             
-            <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="verified">Verified</TabsTrigger>
-                <TabsTrigger value="ongoing">Ongoing</TabsTrigger>
-                <TabsTrigger value="completed">Completed</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadCampaigns}
+                className="flex items-center gap-1"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
+              
+              <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+                <TabsList>
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="verified">Verified</TabsTrigger>
+                  <TabsTrigger value="ongoing">Ongoing</TabsTrigger>
+                  <TabsTrigger value="completed">Completed</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
           
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <Loader2 className="h-10 w-10 text-indigo-600 animate-spin mb-4" />
+              <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
               <p className="text-muted-foreground">Loading campaigns...</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
-              <p className="text-foreground font-medium mb-2">{error}</p>
-              <Button onClick={() => loadCampaigns()} variant="outline">
-                Try Again
-              </Button>
-            </div>
+            <Card className="py-10 text-center">
+              <CardContent className="flex flex-col items-center justify-center">
+                <AlertCircle className="h-10 w-10 text-destructive mb-4" />
+                <p className="text-foreground font-medium mb-2">{error}</p>
+                <Button onClick={() => loadCampaigns()} variant="outline" className="mt-2">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try Again
+                </Button>
+              </CardContent>
+            </Card>
           ) : filteredCampaigns.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <p className="text-muted-foreground mb-4">No campaigns found</p>
-              {searchTerm ? (
-                <Button onClick={() => setSearchTerm('')} variant="outline">
-                  Clear Search
-                </Button>
-              ) : isConnected ? (
-                <Button 
-                  onClick={() => navigate('/create-campaign')} 
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Host the First Campaign
-                </Button>
-              ) : (
-                <Button 
-                  onClick={() => navigate('/auth')} 
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
-                >
-                  Connect to Start
-                </Button>
-              )}
-            </div>
+            <Card className="py-10 text-center">
+              <CardContent className="flex flex-col items-center justify-center">
+                <p className="text-muted-foreground mb-4">No campaigns found</p>
+                {searchTerm ? (
+                  <Button onClick={() => setSearchTerm('')} variant="outline">
+                    Clear Search
+                  </Button>
+                ) : isConnected ? (
+                  <Button 
+                    onClick={() => navigate('/create-campaign')} 
+                    className="bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Host the First Campaign
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={() => navigate('/auth')} 
+                    className="bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
+                  >
+                    Connect to Start
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCampaigns.map((campaign) => (

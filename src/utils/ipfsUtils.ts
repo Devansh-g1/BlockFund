@@ -1,100 +1,97 @@
-import { create } from 'ipfs-http-client';
 
-// Configure IPFS - Using a public gateway
-const projectId = '2PCvRIJtx5hVvQOYZdABQnO0pIx';  // This is a placeholder
-const projectSecret = 'e64c1a8c5d5e9b37e1c7dfd63b2bcad8';  // This is a placeholder
-const auth = 'Basic ' + btoa(projectId + ':' + projectSecret);
-
-// Create IPFS client
-const ipfs = create({
-  host: 'ipfs.infura.io',
-  port: 5001,
-  protocol: 'https',
-  headers: {
-    authorization: auth,
-  },
-});
+// Store image directly in Supabase and return URL instead of using IPFS
+import { supabase } from '@/integrations/supabase/client';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Upload a file to IPFS
+ * Upload a file to Supabase Storage
  * @param file File to upload
- * @returns IPFS URL
+ * @returns URL of the uploaded file
  */
-export const uploadFileToIPFS = async (file: File): Promise<string> => {
+export const uploadFileToStorage = async (file: File): Promise<string> => {
   try {
-    const fileBuffer = await readFileAsArrayBuffer(file);
-    const result = await ipfs.add(fileBuffer);
-    return `https://ipfs.io/ipfs/${result.path}`;
+    // Create a unique filename
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${uuidv4()}.${fileExt}`;
+    const filePath = `campaign-images/${fileName}`;
+    
+    // Upload file to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('campaign-assets')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+    
+    if (error) {
+      console.error('Error uploading file to Supabase Storage:', error);
+      throw new Error('Failed to upload file to storage');
+    }
+    
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('campaign-assets')
+      .getPublicUrl(filePath);
+    
+    return publicUrl;
   } catch (error) {
-    console.error('Error uploading file to IPFS:', error);
-    throw new Error('Failed to upload file to IPFS');
+    console.error('Error uploading file:', error);
+    throw new Error('Failed to upload file');
   }
 };
 
 /**
- * Upload multiple files to IPFS
+ * Upload multiple files to Supabase Storage
  * @param files Array of files to upload
- * @returns Array of IPFS URLs
+ * @returns Array of URLs
  */
-export const uploadFilesToIPFS = async (files: File[]): Promise<string[]> => {
+export const uploadFilesToStorage = async (files: File[]): Promise<string[]> => {
   try {
-    const promises = files.map(file => uploadFileToIPFS(file));
+    const promises = files.map(file => uploadFileToStorage(file));
     return await Promise.all(promises);
   } catch (error) {
-    console.error('Error uploading files to IPFS:', error);
-    throw new Error('Failed to upload files to IPFS');
+    console.error('Error uploading files:', error);
+    throw new Error('Failed to upload files');
   }
 };
 
-/**
- * Read a file as an ArrayBuffer
- * @param file File to read
- * @returns ArrayBuffer of the file content
- */
-const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
-  });
-};
+// Legacy IPFS functions for backward compatibility
+export const uploadFileToIPFS = uploadFileToStorage;
+export const uploadFilesToIPFS = uploadFilesToStorage;
 
 /**
- * Upload campaign data to IPFS
+ * Upload campaign data to Storage
  * @param campaignData Campaign data object
- * @returns IPFS URL of the campaign data
+ * @returns URL of the campaign data
  */
 export const uploadCampaignDataToIPFS = async (campaignData: any): Promise<string> => {
   try {
-    // Convert campaign data to JSON string and then to Buffer
+    // Convert campaign data to JSON string
     const jsonString = JSON.stringify(campaignData);
-    const buffer = await Buffer.from(jsonString);
     
-    // Upload to IPFS
-    const result = await ipfs.add(buffer);
-    return `https://ipfs.io/ipfs/${result.path}`;
+    // Create a file from the JSON string
+    const file = new File([jsonString], 'campaign-data.json', { type: 'application/json' });
+    
+    // Upload file to Supabase Storage
+    return await uploadFileToStorage(file);
   } catch (error) {
-    console.error('Error uploading campaign data to IPFS:', error);
-    throw new Error('Failed to upload campaign data to IPFS');
+    console.error('Error uploading campaign data:', error);
+    throw new Error('Failed to upload campaign data');
   }
 };
 
 /**
- * Fetch data from IPFS
- * @param ipfsUrl IPFS URL
+ * Fetch data from IPFS or Storage
+ * @param url URL of the data
  * @returns Fetched data
  */
-export const fetchFromIPFS = async (ipfsUrl: string): Promise<any> => {
+export const fetchFromIPFS = async (url: string): Promise<any> => {
   try {
-    // Extract CID from URL
-    const cid = ipfsUrl.replace('https://ipfs.io/ipfs/', '');
-    
-    // Use HTTP fetch to get the data from IPFS gateway
-    const response = await fetch(`https://ipfs.io/ipfs/${cid}`);
+    // Use HTTP fetch to get the data
+    const response = await fetch(url);
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch from IPFS: ${response.statusText}`);
+      throw new Error(`Failed to fetch data: ${response.statusText}`);
     }
     
     // Check if it's JSON data
@@ -106,7 +103,17 @@ export const fetchFromIPFS = async (ipfsUrl: string): Promise<any> => {
     // Otherwise return as text
     return await response.text();
   } catch (error) {
-    console.error('Error fetching from IPFS:', error);
-    throw new Error('Failed to fetch data from IPFS');
+    console.error('Error fetching data:', error);
+    throw new Error('Failed to fetch data');
   }
+};
+
+// Helper for reading files (kept for backward compatibility)
+const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
 };

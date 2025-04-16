@@ -11,140 +11,93 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import FileUploader from '@/components/FileUploader';
 import { CampaignFormData } from '@/types/campaign';
-import { uploadFileToIPFS, uploadFilesToIPFS } from '@/utils/ipfsUtils';
-import { Loader2 } from 'lucide-react';
+import { uploadFileToStorage, uploadFilesToStorage } from '@/utils/ipfsUtils';
+import { Loader2, Calendar, Target, Info, ImageIcon, FileText, Film } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+
+// Create form schema
+const formSchema = z.object({
+  title: z.string().min(3, {
+    message: "Title must be at least 3 characters long",
+  }),
+  description: z.string().min(20, {
+    message: "Description must be at least 20 characters long",
+  }),
+  target: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+    message: "Target amount must be greater than 0",
+  }),
+  deadline: z.date({
+    required_error: "Deadline is required",
+  }).refine(date => date > new Date(), {
+    message: "Deadline must be in the future",
+  }),
+});
 
 const CreateCampaign = () => {
   const navigate = useNavigate();
   const { contract, address, isConnected, connectWallet } = useWeb3();
   const { toast } = useToast();
   
-  const [formData, setFormData] = useState<CampaignFormData>({
-    title: '',
-    description: '',
-    target: '',
-    deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-    image: null,
-    documents: [],
-    videos: []
-  });
-  
+  const [image, setImage] = useState<File | null>(null);
+  const [documents, setDocuments] = useState<File[]>([]);
+  const [videos, setVideos] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [imageError, setImageError] = useState<string | null>(null);
 
-  // Handle form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-    
-    // Clear error for this field
-    if (errors[name]) {
-      setErrors({
-        ...errors,
-        [name]: ''
-      });
-    }
-  };
-
-  // Handle date change
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const date = new Date(e.target.value);
-    setFormData({
-      ...formData,
-      deadline: date
-    });
-    
-    // Clear error for this field
-    if (errors.deadline) {
-      setErrors({
-        ...errors,
-        deadline: ''
-      });
-    }
-  };
+  // Create form
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      target: "",
+      deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+    },
+  });
 
   // Handle image upload
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFormData({
-        ...formData,
-        image: e.target.files[0]
-      });
-      
-      // Clear error for this field
-      if (errors.image) {
-        setErrors({
-          ...errors,
-          image: ''
-        });
+      const file = e.target.files[0];
+      // Check file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setImageError("Image size must be less than 5MB");
+        return;
       }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        setImageError("Only image files are allowed");
+        return;
+      }
+      
+      setImage(file);
+      setImageError(null);
     }
-  };
-
-  // Handle document files
-  const handleDocumentsChange = (files: File[]) => {
-    setFormData({
-      ...formData,
-      documents: files
-    });
-  };
-
-  // Handle video files
-  const handleVideosChange = (files: File[]) => {
-    setFormData({
-      ...formData,
-      videos: files
-    });
-  };
-
-  // Validate form
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
-    }
-    
-    if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
-    }
-    
-    if (!formData.target || parseFloat(formData.target) <= 0) {
-      newErrors.target = 'Target amount must be greater than 0';
-    }
-    
-    if (!formData.deadline) {
-      newErrors.deadline = 'Deadline is required';
-    } else if (formData.deadline.getTime() <= Date.now()) {
-      newErrors.deadline = 'Deadline must be in the future';
-    }
-    
-    if (!formData.image) {
-      newErrors.image = 'Campaign image is required';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
   };
 
   // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!isConnected) {
       await connectWallet();
       return;
     }
     
-    if (!validateForm()) {
+    if (!image) {
+      setImageError("Campaign image is required");
       toast({
-        title: 'Form Incomplete',
-        description: 'Please fill in all required fields correctly',
+        title: 'Missing Image',
+        description: 'Please upload a campaign image',
         variant: 'destructive'
       });
       return;
@@ -153,45 +106,60 @@ const CreateCampaign = () => {
     try {
       setSubmitting(true);
       
-      // Upload files to IPFS
+      // Upload files
       toast({
         title: 'Uploading Files',
-        description: 'Your files are being uploaded to IPFS'
+        description: 'Your files are being uploaded to storage...'
       });
       
       // Upload campaign image
       let imageUrl = '';
-      if (formData.image) {
-        try {
-          imageUrl = await uploadFileToIPFS(formData.image);
-          console.log('Image uploaded successfully:', imageUrl);
-        } catch (error) {
-          console.error('Image upload error:', error);
-          throw new Error('Failed to upload image');
-        }
+      try {
+        console.log('Uploading image:', image.name);
+        imageUrl = await uploadFileToStorage(image);
+        console.log('Image uploaded successfully:', imageUrl);
+      } catch (error: any) {
+        console.error('Image upload error:', error);
+        toast({
+          title: 'Image Upload Failed',
+          description: error.message || 'Failed to upload image',
+          variant: 'destructive'
+        });
+        setSubmitting(false);
+        return;
       }
       
       // Upload documents
       let documentUrls: string[] = [];
-      if (formData.documents.length > 0) {
+      if (documents.length > 0) {
         try {
-          documentUrls = await uploadFilesToIPFS(formData.documents);
+          console.log('Uploading documents:', documents.length);
+          documentUrls = await uploadFilesToStorage(documents);
           console.log('Documents uploaded successfully:', documentUrls);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Documents upload error:', error);
-          throw new Error('Failed to upload documents');
+          toast({
+            title: 'Document Upload Warning',
+            description: 'Some documents could not be uploaded, but we will continue with your campaign creation',
+            variant: 'default'
+          });
         }
       }
       
       // Upload videos
       let videoUrls: string[] = [];
-      if (formData.videos.length > 0) {
+      if (videos.length > 0) {
         try {
-          videoUrls = await uploadFilesToIPFS(formData.videos);
+          console.log('Uploading videos:', videos.length);
+          videoUrls = await uploadFilesToStorage(videos);
           console.log('Videos uploaded successfully:', videoUrls);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Videos upload error:', error);
-          throw new Error('Failed to upload videos');
+          toast({
+            title: 'Video Upload Warning',
+            description: 'Some videos could not be uploaded, but we will continue with your campaign creation',
+            variant: 'default'
+          });
         }
       }
 
@@ -203,20 +171,32 @@ const CreateCampaign = () => {
       }
       
       const userId = user.id;
+      console.log('User ID:', userId);
       
-      // Convert target amount to ethers
-      const targetAmount = parseFloat(formData.target);
+      // Convert target amount to number
+      const targetAmount = parseFloat(values.target);
       
       // Convert deadline to timestamp
-      const deadlineTimestamp = formData.deadline;
+      const deadlineTimestamp = values.deadline;
+      
+      console.log('Saving campaign to Supabase with data:', {
+        creator_id: userId,
+        title: values.title,
+        description: values.description,
+        target_amount: targetAmount,
+        deadline: deadlineTimestamp.toISOString(),
+        image_url: imageUrl,
+        documents: documentUrls,
+        videos: videoUrls
+      });
       
       // Save campaign to Supabase
       const { data: campaignData, error: campaignError } = await supabase
         .from('campaigns')
         .insert({
           creator_id: userId,
-          title: formData.title,
-          description: formData.description,
+          title: values.title,
+          description: values.description,
           target_amount: targetAmount,
           deadline: deadlineTimestamp.toISOString(),
           image_url: imageUrl,
@@ -230,7 +210,7 @@ const CreateCampaign = () => {
       
       if (campaignError) {
         console.error('Supabase Error:', campaignError);
-        throw new Error('Error saving campaign to database');
+        throw new Error('Error saving campaign to database: ' + campaignError.message);
       }
       
       console.log('Campaign created in Supabase:', campaignData);
@@ -244,15 +224,15 @@ const CreateCampaign = () => {
         
         try {
           // Convert ETH to Wei
-          const targetInWei = ethers.utils.parseEther(formData.target);
+          const targetInWei = ethers.utils.parseEther(values.target);
           
           // Convert deadline to UNIX timestamp
-          const deadlineTimestamp = dateToTimestamp(formData.deadline);
+          const deadlineTimestamp = dateToTimestamp(values.deadline);
           
           // Create campaign transaction
           const transaction = await contract.createCampaign(
-            formData.title,
-            formData.description,
+            values.title,
+            values.description,
             targetInWei,
             deadlineTimestamp,
             imageUrl,
@@ -263,9 +243,14 @@ const CreateCampaign = () => {
           // Wait for transaction to be mined
           await transaction.wait();
           console.log('Campaign created on blockchain');
-        } catch (error) {
+        } catch (error: any) {
           console.error('Blockchain error:', error);
           // Continue anyway since we have the data in Supabase
+          toast({
+            title: 'Blockchain Warning',
+            description: 'Campaign saved to database but blockchain transaction failed',
+            variant: 'default'
+          });
         }
       }
       
@@ -290,13 +275,13 @@ const CreateCampaign = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
         <button 
           onClick={() => navigate('/')}
-          className="flex items-center text-indigo-600 hover:text-indigo-800 mb-6"
+          className="flex items-center text-primary hover:text-primary/80 mb-6"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
@@ -314,198 +299,248 @@ const CreateCampaign = () => {
         </button>
         
         <div className="max-w-3xl mx-auto">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 md:p-8">
-            <div className="mb-6 text-center">
-              <h1 className="text-2xl font-bold text-gray-900">Create New Campaign</h1>
-              <p className="text-gray-600 mt-1">
-                Launch your crowdfunding campaign on the blockchain
-              </p>
-            </div>
+          <Card className="border-border shadow-md">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-indigo-500 bg-clip-text text-transparent">Create New Campaign</CardTitle>
+              <CardDescription>
+                Launch your crowdfunding campaign and share it with the world
+              </CardDescription>
+            </CardHeader>
             
             {!isConnected ? (
-              <div className="text-center py-8">
+              <CardContent className="text-center py-8">
                 <h2 className="text-xl font-medium mb-2">Connect Your Wallet</h2>
-                <p className="text-gray-600 mb-6">
+                <p className="text-muted-foreground mb-6">
                   You need to connect your wallet before creating a campaign
                 </p>
                 <Button 
                   onClick={connectWallet} 
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                  className="bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
                 >
                   Connect Wallet
                 </Button>
-              </div>
+              </CardContent>
             ) : (
-              <form onSubmit={handleSubmit}>
-                <div className="space-y-6">
-                  <div>
-                    <Label htmlFor="title">Campaign Title</Label>
-                    <Input
-                      id="title"
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)}>
+                  <CardContent className="space-y-6">
+                    <FormField
+                      control={form.control}
                       name="title"
-                      placeholder="Enter campaign title"
-                      value={formData.title}
-                      onChange={handleInputChange}
-                      className={`mt-1 ${errors.title ? 'border-red-500' : ''}`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center">
+                            <Info className="h-4 w-4 mr-2 text-primary" />
+                            Campaign Title
+                          </FormLabel>
+                          <FormControl>
+                            <Input 
+                              placeholder="Enter a catchy title for your campaign" 
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    {errors.title && (
-                      <p className="text-red-500 text-sm mt-1">{errors.title}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="description">Campaign Description</Label>
-                    <Textarea
-                      id="description"
+                    
+                    <FormField
+                      control={form.control}
                       name="description"
-                      placeholder="Describe your campaign in detail"
-                      value={formData.description}
-                      onChange={handleInputChange}
-                      className={`mt-1 min-h-32 ${errors.description ? 'border-red-500' : ''}`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center">
+                            <FileText className="h-4 w-4 mr-2 text-primary" />
+                            Campaign Description
+                          </FormLabel>
+                          <FormControl>
+                            <Textarea 
+                              placeholder="Describe your campaign in detail" 
+                              className="min-h-32" 
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Include your goals, what the funds will be used for, and your story
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    {errors.description && (
-                      <p className="text-red-500 text-sm mt-1">{errors.description}</p>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <Label htmlFor="target">Funding Target (ETH)</Label>
-                      <Input
-                        id="target"
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField
+                        control={form.control}
                         name="target"
-                        type="number"
-                        placeholder="e.g., 5"
-                        min="0"
-                        step="0.01"
-                        value={formData.target}
-                        onChange={handleInputChange}
-                        className={`mt-1 ${errors.target ? 'border-red-500' : ''}`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center">
+                              <Target className="h-4 w-4 mr-2 text-primary" />
+                              Funding Target (ETH)
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                placeholder="e.g., 5" 
+                                min="0.01" 
+                                step="0.01" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              The amount of ETH you're aiming to raise
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                      {errors.target && (
-                        <p className="text-red-500 text-sm mt-1">{errors.target}</p>
+                      
+                      <FormField
+                        control={form.control}
+                        name="deadline"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel className="flex items-center">
+                              <Calendar className="h-4 w-4 mr-2 text-primary" />
+                              Campaign Deadline
+                            </FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                      "w-full pl-3 text-left font-normal",
+                                      !field.value && "text-muted-foreground"
+                                    )}
+                                  >
+                                    {field.value ? (
+                                      format(field.value, "PPP")
+                                    ) : (
+                                      <span>Pick a date</span>
+                                    )}
+                                    <Calendar className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <CalendarComponent
+                                  mode="single"
+                                  selected={field.value}
+                                  onSelect={field.onChange}
+                                  disabled={(date) => date < new Date()}
+                                  initialFocus
+                                  className={cn("p-3 pointer-events-auto")}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <FormDescription>
+                              When the campaign will end
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="flex items-center">
+                        <ImageIcon className="h-4 w-4 mr-2 text-primary" />
+                        Campaign Image
+                      </Label>
+                      <div className={`mt-1 ${imageError ? 'border-red-500' : ''}`}>
+                        <input
+                          id="image"
+                          name="image"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="hidden"
+                        />
+                        <div className="border border-dashed border-border rounded-lg p-4 text-center bg-muted/20 hover:bg-muted/40 transition cursor-pointer">
+                          <label htmlFor="image" className="cursor-pointer block p-4">
+                            {image ? (
+                              <div className="space-y-2">
+                                <div className="mx-auto w-40 h-40 overflow-hidden rounded-md">
+                                  <img
+                                    src={URL.createObjectURL(image)}
+                                    alt="Preview"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {image.name}
+                                </p>
+                                <p className="text-xs text-primary">
+                                  Click to change image
+                                </p>
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-primary/10">
+                                  <ImageIcon className="h-6 w-6 text-primary" />
+                                </div>
+                                <p className="mt-2 text-sm text-muted-foreground">
+                                  Click to upload a campaign image
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  JPG, PNG or GIF, max 5MB
+                                </p>
+                              </div>
+                            )}
+                          </label>
+                        </div>
+                      </div>
+                      {imageError && (
+                        <p className="text-red-500 text-sm mt-1">{imageError}</p>
                       )}
                     </div>
                     
                     <div>
-                      <Label htmlFor="deadline">Campaign Deadline</Label>
-                      <Input
-                        id="deadline"
-                        name="deadline"
-                        type="date"
-                        value={formData.deadline.toISOString().split('T')[0]}
-                        min={new Date().toISOString().split('T')[0]}
-                        onChange={handleDateChange}
-                        className={`mt-1 ${errors.deadline ? 'border-red-500' : ''}`}
-                      />
-                      {errors.deadline && (
-                        <p className="text-red-500 text-sm mt-1">{errors.deadline}</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="image">Campaign Image</Label>
-                    <div className={`mt-1 ${errors.image ? 'border-red-500' : ''}`}>
-                      <input
-                        id="image"
-                        name="image"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
-                      <div className="border border-dashed border-gray-300 rounded-lg p-4 text-center bg-gray-50 hover:bg-gray-100 transition cursor-pointer">
-                        <label htmlFor="image" className="cursor-pointer block p-4">
-                          {formData.image ? (
-                            <div className="space-y-2">
-                              <div className="mx-auto w-40 h-40 overflow-hidden rounded-md">
-                                <img
-                                  src={URL.createObjectURL(formData.image)}
-                                  alt="Preview"
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                              <p className="text-sm text-gray-600">
-                                {formData.image.name}
-                              </p>
-                              <p className="text-xs text-indigo-600">
-                                Click to change image
-                              </p>
-                            </div>
-                          ) : (
-                            <div>
-                              <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100">
-                                <svg
-                                  className="w-6 h-6 text-indigo-600"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                  />
-                                </svg>
-                              </div>
-                              <p className="mt-2 text-sm text-gray-600">
-                                Click to upload a campaign image
-                              </p>
-                              <p className="mt-1 text-xs text-gray-500">
-                                JPG, PNG or GIF, max 5MB
-                              </p>
-                            </div>
-                          )}
-                        </label>
+                      <Label className="flex items-center">
+                        <FileText className="h-4 w-4 mr-2 text-primary" />
+                        Verification Documents
+                      </Label>
+                      <div className="mt-1">
+                        <FileUploader
+                          id="documents"
+                          label="Upload documents to verify your campaign"
+                          accept=".pdf,.doc,.docx,.txt"
+                          multiple={true}
+                          maxFiles={5}
+                          maxSize={10}
+                          files={documents}
+                          setFiles={setDocuments}
+                          type="document"
+                        />
                       </div>
                     </div>
-                    {errors.image && (
-                      <p className="text-red-500 text-sm mt-1">{errors.image}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <Label>Verification Documents</Label>
-                    <div className="mt-1">
-                      <FileUploader
-                        id="documents"
-                        label="Upload documents to verify your campaign"
-                        accept=".pdf,.doc,.docx,.txt"
-                        multiple={true}
-                        maxFiles={5}
-                        maxSize={10}
-                        files={formData.documents}
-                        setFiles={handleDocumentsChange}
-                        type="document"
-                      />
+                    
+                    <div>
+                      <Label className="flex items-center">
+                        <Film className="h-4 w-4 mr-2 text-primary" />
+                        Campaign Videos
+                      </Label>
+                      <div className="mt-1">
+                        <FileUploader
+                          id="videos"
+                          label="Upload videos about your campaign"
+                          accept="video/*"
+                          multiple={true}
+                          maxFiles={2}
+                          maxSize={50}
+                          files={videos}
+                          setFiles={setVideos}
+                          type="video"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div>
-                    <Label>Campaign Videos</Label>
-                    <div className="mt-1">
-                      <FileUploader
-                        id="videos"
-                        label="Upload videos about your campaign"
-                        accept="video/*"
-                        multiple={true}
-                        maxFiles={2}
-                        maxSize={50}
-                        files={formData.videos}
-                        setFiles={handleVideosChange}
-                        type="video"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="pt-4">
+                  </CardContent>
+                  <CardFooter className="pt-4">
                     <Button
                       type="submit"
                       disabled={submitting}
-                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                      className="w-full bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
                     >
                       {submitting ? (
                         <>
@@ -516,11 +551,11 @@ const CreateCampaign = () => {
                         'Create Campaign'
                       )}
                     </Button>
-                  </div>
-                </div>
-              </form>
+                  </CardFooter>
+                </form>
+              </Form>
             )}
-          </div>
+          </Card>
         </div>
       </main>
     </div>
