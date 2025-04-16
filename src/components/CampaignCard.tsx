@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Campaign } from '@/types/campaign';
@@ -8,21 +8,25 @@ import { calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAdd
 import { Badge } from '@/components/ui/badge';
 import { CalendarIcon, CheckCircle, Users, ShieldCheck, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 interface CampaignCardProps {
   campaign: Campaign;
 }
 
 const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
+  const { toast } = useToast();
   const progress = calculateProgress(campaign.amountCollected, campaign.target);
   const timeRemaining = calculateTimeRemaining(campaign.deadline);
   const [isGovVerified, setIsGovVerified] = useState<boolean>(false);
-  
+  const [userVerificationStatus, setUserVerificationStatus] = useState<boolean | null>(null);
+  const [canVote, setCanVote] = useState<boolean>(false);
+
   useEffect(() => {
-    const fetchCreatorInfo = async () => {
+    const fetchVerificationData = async () => {
       try {
-        // Get the user information from auth.users through the admin API
+        // Check if campaign is from gov.in email
         const { data: userData, error: userError } = await supabase.auth
           .admin.getUserById(campaign.owner);
           
@@ -31,14 +35,86 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         // Check if email ends with @gov.in
         const userEmail = userData?.user?.email || '';
         setIsGovVerified(userEmail.endsWith('@gov.in'));
+
+        // Check if current user can vote
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: donationData } = await supabase
+            .from('donations')
+            .select('*')
+            .eq('campaign_id', campaign.id)
+            .eq('donor_id', user.id)
+            .single();
+
+          if (donationData) {
+            // Check if user has already voted
+            const { data: voteData } = await supabase
+              .from('campaign_verifications')
+              .select('*')
+              .eq('campaign_id', campaign.id)
+              .eq('voter_id', user.id)
+              .single();
+
+            setCanVote(!voteData);
+          }
+        }
+
+        // Check user's verification vote
+        const { data: userVoteData } = await supabase
+          .from('campaign_verifications')
+          .select('is_verified')
+          .eq('campaign_id', campaign.id)
+          .eq('voter_id', user?.id || '')
+          .single();
+
+        setUserVerificationStatus(userVoteData?.is_verified ?? null);
       } catch (error) {
-        console.error('Error fetching creator info:', error);
-        setIsGovVerified(false);
+        console.error('Error fetching verification data:', error);
       }
     };
     
-    fetchCreatorInfo();
-  }, [campaign.owner]);
+    fetchVerificationData();
+  }, [campaign.owner, campaign.id]);
+
+  const handleVerificationVote = async (vote: boolean) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast({
+          title: 'Authentication Required',
+          description: 'Please log in to vote on campaign verification.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('campaign_verifications')
+        .insert({
+          campaign_id: campaign.id,
+          voter_id: user.id,
+          is_verified: vote
+        });
+
+      if (error) throw error;
+
+      setUserVerificationStatus(vote);
+      setCanVote(false);
+
+      toast({
+        title: 'Vote Submitted',
+        description: `You have ${vote ? 'verified' : 'flagged'} this campaign.`,
+        variant: 'default'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Voting Error',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
 
   return (
     <Link to={`/campaign/${campaign.id}`}>
@@ -106,7 +182,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
           </div>
         </CardContent>
         
-        <CardFooter className="p-4 pt-0 border-t border-gray-100 dark:border-gray-800">
+        <CardFooter className="p-4 pt-0 border-t border-gray-100 dark:border-gray-800 space-y-2">
           <div className="w-full">
             <div className={`w-full text-center text-xs font-medium py-1 rounded-full ${
               isGovVerified 
@@ -118,6 +194,44 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
               {isGovVerified ? 'Government Verified' : campaign.isVerified ? 'Community Verified' : 'Awaiting Verification'}
             </div>
           </div>
+          
+          {!isGovVerified && !campaign.isVerified && canVote && (
+            <div className="flex justify-between w-full space-x-2">
+              <Button 
+                variant="outline" 
+                className="w-full text-green-600 border-green-600 hover:bg-green-50" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleVerificationVote(true);
+                }}
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Verify Campaign
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full text-red-600 border-red-600 hover:bg-red-50" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleVerificationVote(false);
+                }}
+              >
+                Flag Campaign
+              </Button>
+            </div>
+          )}
+          
+          {userVerificationStatus !== null && (
+            <div className={`w-full text-center text-xs py-1 ${
+              userVerificationStatus 
+                ? 'text-green-600 bg-green-50' 
+                : 'text-red-600 bg-red-50'
+            }`}>
+              {userVerificationStatus 
+                ? 'You verified this campaign' 
+                : 'You flagged this campaign'}
+            </div>
+          )}
         </CardFooter>
       </Card>
     </Link>

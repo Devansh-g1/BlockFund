@@ -9,6 +9,38 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      campaign_verifications: {
+        Row: {
+          campaign_id: string | null
+          created_at: string | null
+          id: string
+          is_verified: boolean
+          voter_id: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_verified: boolean
+          voter_id?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_verified?: boolean
+          voter_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_verifications_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           amount_collected: number
