@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
-import { useWeb3Extended } from '@/context/Web3ContextExtended';
 import { Campaign } from '@/types/campaign';
 import CampaignCard from '@/components/CampaignCard';
 import Header from '@/components/Header';
@@ -11,11 +10,12 @@ import { Loader2, AlertCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
   const navigate = useNavigate();
   const { isConnected } = useWeb3();
-  const { fetchCampaigns } = useWeb3Extended();
+  const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +26,23 @@ const Index = () => {
   const loadCampaigns = async () => {
     try {
       setLoading(true);
-      const campaignData = await fetchCampaigns();
+      
+      // Get campaigns from Supabase
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (campaignError) {
+        throw campaignError;
+      }
+      
+      if (!campaignData) {
+        setCampaigns([]);
+        return;
+      }
+      
+      console.log("Fetched campaigns:", campaignData);
       
       // Transform the data to match our Campaign type
       const formattedCampaigns = campaignData.map((campaign: any) => ({
@@ -47,9 +63,14 @@ const Index = () => {
       
       setCampaigns(formattedCampaigns);
       setError(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching campaigns:', error);
       setError('Failed to load campaigns. Please try again later.');
+      toast({
+        title: 'Error',
+        description: 'Failed to load campaigns. Please try again later.',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
@@ -67,6 +88,7 @@ const Index = () => {
         schema: 'public', 
         table: 'campaigns' 
       }, () => {
+        console.log("Real-time update received for campaigns");
         loadCampaigns();
       })
       .subscribe();
@@ -158,8 +180,8 @@ const Index = () => {
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <AlertCircle className="h-10 w-10 text-red-500 mb-4" />
               <p className="text-foreground font-medium mb-2">{error}</p>
-              <Button onClick={() => navigate('/auth')} variant="outline">
-                Connect Wallet
+              <Button onClick={() => loadCampaigns()} variant="outline">
+                Try Again
               </Button>
             </div>
           ) : filteredCampaigns.length === 0 ? (

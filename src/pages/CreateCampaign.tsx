@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
@@ -13,6 +14,7 @@ import { CampaignFormData } from '@/types/campaign';
 import { uploadFileToIPFS, uploadFilesToIPFS } from '@/utils/ipfsUtils';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const CreateCampaign = () => {
   const navigate = useNavigate();
@@ -158,69 +160,128 @@ const CreateCampaign = () => {
       });
       
       // Upload campaign image
-      const imageUrl = formData.image ? await uploadFileToIPFS(formData.image) : '';
+      let imageUrl = '';
+      if (formData.image) {
+        try {
+          imageUrl = await uploadFileToIPFS(formData.image);
+          console.log('Image uploaded successfully:', imageUrl);
+        } catch (error) {
+          console.error('Image upload error:', error);
+          throw new Error('Failed to upload image');
+        }
+      }
       
       // Upload documents
-      const documentUrls = formData.documents.length > 0 
-        ? await uploadFilesToIPFS(formData.documents) 
-        : [];
+      let documentUrls: string[] = [];
+      if (formData.documents.length > 0) {
+        try {
+          documentUrls = await uploadFilesToIPFS(formData.documents);
+          console.log('Documents uploaded successfully:', documentUrls);
+        } catch (error) {
+          console.error('Documents upload error:', error);
+          throw new Error('Failed to upload documents');
+        }
+      }
       
       // Upload videos
-      const videoUrls = formData.videos.length > 0 
-        ? await uploadFilesToIPFS(formData.videos) 
-        : [];
+      let videoUrls: string[] = [];
+      if (formData.videos.length > 0) {
+        try {
+          videoUrls = await uploadFilesToIPFS(formData.videos);
+          console.log('Videos uploaded successfully:', videoUrls);
+        } catch (error) {
+          console.error('Videos upload error:', error);
+          throw new Error('Failed to upload videos');
+        }
+      }
+
+      // Get the user's ID from Supabase
+      const { data: { user } } = await supabase.auth.getUser();
       
-      // Only use contract if connected to blockchain
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      const userId = user.id;
+      
+      // Convert target amount to ethers
+      const targetAmount = parseFloat(formData.target);
+      
+      // Convert deadline to timestamp
+      const deadlineTimestamp = formData.deadline;
+      
+      // Save campaign to Supabase
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .insert({
+          creator_id: userId,
+          title: formData.title,
+          description: formData.description,
+          target_amount: targetAmount,
+          deadline: deadlineTimestamp.toISOString(),
+          image_url: imageUrl,
+          documents: documentUrls,
+          videos: videoUrls,
+          is_verified: false,
+          amount_collected: 0
+        })
+        .select()
+        .single();
+      
+      if (campaignError) {
+        console.error('Supabase Error:', campaignError);
+        throw new Error('Error saving campaign to database');
+      }
+      
+      console.log('Campaign created in Supabase:', campaignData);
+      
+      // If contract is connected, also save to blockchain
       if (contract) {
         toast({
           title: 'Creating Campaign',
           description: 'Submitting campaign to the blockchain'
         });
         
-        // Convert ETH to Wei
-        const targetInWei = ethers.utils.parseEther(formData.target);
-        
-        // Convert deadline to UNIX timestamp
-        const deadlineTimestamp = dateToTimestamp(formData.deadline);
-        
-        // Create campaign transaction with is_verified set to false
-        const transaction = await contract.createCampaign(
-          formData.title,
-          formData.description,
-          targetInWei,
-          deadlineTimestamp,
-          imageUrl,
-          documentUrls,
-          videoUrls
-        );
-        
-        // Wait for transaction to be mined
-        await transaction.wait();
-        
-        toast({
-          title: 'Campaign Created',
-          description: 'Your campaign is now awaiting verification',
-          variant: 'default'
-        });
-        
-        // Navigate to home page to see the new campaign
-        navigate('/');
-      } else {
-        // Mock success for demo
-        setTimeout(() => {
-          toast({
-            title: 'Demo Mode',
-            description: 'In a real app, your campaign would be created on the blockchain',
-            variant: 'default'
-          });
-          navigate('/');
-        }, 2000);
+        try {
+          // Convert ETH to Wei
+          const targetInWei = ethers.utils.parseEther(formData.target);
+          
+          // Convert deadline to UNIX timestamp
+          const deadlineTimestamp = dateToTimestamp(formData.deadline);
+          
+          // Create campaign transaction
+          const transaction = await contract.createCampaign(
+            formData.title,
+            formData.description,
+            targetInWei,
+            deadlineTimestamp,
+            imageUrl,
+            documentUrls,
+            videoUrls
+          );
+          
+          // Wait for transaction to be mined
+          await transaction.wait();
+          console.log('Campaign created on blockchain');
+        } catch (error) {
+          console.error('Blockchain error:', error);
+          // Continue anyway since we have the data in Supabase
+        }
       }
-    } catch (error) {
+      
+      toast({
+        title: 'Campaign Created',
+        description: 'Your campaign is now awaiting verification',
+        variant: 'default'
+      });
+      
+      // Navigate to home page to see the new campaign
+      navigate('/');
+    } catch (error: any) {
       console.error('Error creating campaign:', error);
       toast({
         title: 'Creation Failed',
-        description: 'There was an error creating your campaign',
+        description: error.message || 'There was an error creating your campaign',
         variant: 'destructive'
       });
     } finally {
