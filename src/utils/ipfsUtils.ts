@@ -16,44 +16,84 @@ export const uploadFileToStorage = async (file: File): Promise<string> => {
     const fileName = `${uuidv4()}.${fileExt}`;
     const filePath = `campaign-images/${fileName}`;
     
-    // Check if storage bucket exists
-    const { data: buckets } = await supabase.storage.listBuckets();
+    // First get storage buckets to see if our bucket exists
+    const { data: buckets, error: bucketListError } = await supabase.storage.listBuckets();
+    
+    if (bucketListError) {
+      console.error('Error listing storage buckets:', bucketListError);
+      toast({
+        title: "Storage Error",
+        description: "Could not access storage. Please try again.",
+        variant: "destructive"
+      });
+      throw new Error(`Failed to access storage: ${bucketListError.message}`);
+    }
+    
+    // Check if bucket exists
     const bucketExists = buckets?.some(bucket => bucket.name === 'campaign-assets');
     
-    // Create bucket if it doesn't exist
+    // If bucket doesn't exist, create it - with explicit error handling
     if (!bucketExists) {
-      const { error: bucketError } = await supabase.storage.createBucket('campaign-assets', {
-        public: true,
-        fileSizeLimit: 52428800 // 50MB
-      });
+      console.log('Campaign assets bucket does not exist, creating...');
       
-      if (bucketError) {
-        console.error('Error creating storage bucket:', bucketError);
-        throw new Error('Failed to create storage bucket');
+      try {
+        const { error: createBucketError } = await supabase.storage.createBucket('campaign-assets', {
+          public: true,
+          fileSizeLimit: 52428800 // 50MB
+        });
+        
+        if (createBucketError) {
+          console.error('Error creating bucket:', createBucketError);
+          toast({
+            title: "Storage Setup Failed",
+            description: `Could not create storage: ${createBucketError.message}`,
+            variant: "destructive"
+          });
+          throw new Error(`Failed to create storage bucket: ${createBucketError.message}`);
+        }
+        
+        console.log('Campaign assets bucket created successfully');
+      } catch (bucketCreationError: any) {
+        console.error('Caught error during bucket creation:', bucketCreationError);
+        toast({
+          title: "Storage Error",
+          description: bucketCreationError.message || "Failed to create storage for images",
+          variant: "destructive"
+        });
+        throw new Error(`Storage setup failed: ${bucketCreationError.message || "Unknown error"}`);
       }
     }
     
-    // Upload file to Supabase Storage
-    const { data, error } = await supabase.storage
+    // Upload file to Supabase Storage with improved error handling
+    console.log(`Uploading file ${filePath} to campaign-assets bucket...`);
+    const { data, error: uploadError } = await supabase.storage
       .from('campaign-assets')
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: true // Allow overwriting files with the same name
       });
     
-    if (error) {
-      console.error('Error uploading file to Supabase Storage:', error);
-      throw new Error(`Failed to upload file: ${error.message}`);
+    if (uploadError) {
+      console.error('Error uploading file to Supabase Storage:', uploadError);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload file: ${uploadError.message}`,
+        variant: "destructive"
+      });
+      throw new Error(`Failed to upload file: ${uploadError.message}`);
     }
+    
+    console.log('File uploaded successfully, getting public URL...');
     
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('campaign-assets')
       .getPublicUrl(filePath);
     
+    console.log('Image URL generated:', publicUrl);
     return publicUrl;
   } catch (error: any) {
-    console.error('Error uploading file:', error);
+    console.error('Error in uploadFileToStorage:', error);
     toast({
       title: "Upload Error",
       description: error.message || "Failed to upload file",
@@ -63,6 +103,7 @@ export const uploadFileToStorage = async (file: File): Promise<string> => {
   }
 };
 
+// Rest of functions 
 /**
  * Upload multiple files to Supabase Storage
  * @param files Array of files to upload
