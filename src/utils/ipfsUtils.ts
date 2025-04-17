@@ -1,3 +1,4 @@
+
 // Store image directly in Supabase and return URL instead of using IPFS
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
@@ -18,7 +19,7 @@ export const uploadFileToStorage = async (file: File): Promise<string> => {
     console.log(`Uploading file ${filePath} to campaign-assets bucket...`);
     
     // Upload file directly to Supabase Storage
-    // We assume the bucket exists and is properly configured with RLS policies
+    // The bucket has been created with appropriate policies
     const { data, error: uploadError } = await supabase.storage
       .from('campaign-assets')
       .upload(filePath, file, {
