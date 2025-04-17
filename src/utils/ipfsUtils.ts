@@ -2,6 +2,7 @@
 // Store image directly in Supabase and return URL instead of using IPFS
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from '@/hooks/use-toast';
 
 /**
  * Upload a file to Supabase Storage
@@ -15,17 +16,34 @@ export const uploadFileToStorage = async (file: File): Promise<string> => {
     const fileName = `${uuidv4()}.${fileExt}`;
     const filePath = `campaign-images/${fileName}`;
     
+    // Check if storage bucket exists
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some(bucket => bucket.name === 'campaign-assets');
+    
+    // Create bucket if it doesn't exist
+    if (!bucketExists) {
+      const { error: bucketError } = await supabase.storage.createBucket('campaign-assets', {
+        public: true,
+        fileSizeLimit: 52428800 // 50MB
+      });
+      
+      if (bucketError) {
+        console.error('Error creating storage bucket:', bucketError);
+        throw new Error('Failed to create storage bucket');
+      }
+    }
+    
     // Upload file to Supabase Storage
     const { data, error } = await supabase.storage
       .from('campaign-assets')
       .upload(filePath, file, {
         cacheControl: '3600',
-        upsert: false
+        upsert: true // Allow overwriting files with the same name
       });
     
     if (error) {
       console.error('Error uploading file to Supabase Storage:', error);
-      throw new Error('Failed to upload file to storage');
+      throw new Error(`Failed to upload file: ${error.message}`);
     }
     
     // Get public URL
@@ -34,9 +52,14 @@ export const uploadFileToStorage = async (file: File): Promise<string> => {
       .getPublicUrl(filePath);
     
     return publicUrl;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error uploading file:', error);
-    throw new Error('Failed to upload file');
+    toast({
+      title: "Upload Error",
+      description: error.message || "Failed to upload file",
+      variant: "destructive"
+    });
+    throw new Error('Failed to upload file: ' + (error.message || "Unknown error"));
   }
 };
 
@@ -47,6 +70,8 @@ export const uploadFileToStorage = async (file: File): Promise<string> => {
  */
 export const uploadFilesToStorage = async (files: File[]): Promise<string[]> => {
   try {
+    if (!files || files.length === 0) return [];
+    
     const promises = files.map(file => uploadFileToStorage(file));
     return await Promise.all(promises);
   } catch (error) {

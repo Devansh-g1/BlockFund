@@ -2,6 +2,7 @@
 import React, { useCallback, useState } from 'react';
 import { Paperclip, X, File, Video, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
 
 interface FileUploaderProps {
   accept?: string;
@@ -12,7 +13,8 @@ interface FileUploaderProps {
   setFiles: React.Dispatch<React.SetStateAction<File[]>>;
   label: string;
   id: string;
-  type?: 'document' | 'video';
+  type?: 'document' | 'video' | 'image';
+  required?: boolean;
 }
 
 const FileUploader: React.FC<FileUploaderProps> = ({
@@ -25,6 +27,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   label,
   id,
   type = 'document',
+  required = false,
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +43,20 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     }
   }, []);
 
+  // Get appropriate file type for validation
+  const getFileTypeRegex = useCallback(() => {
+    switch (type) {
+      case 'document':
+        return /pdf|doc|docx|text|application\/*/;
+      case 'video':
+        return /video\/*/;
+      case 'image':
+        return /image\/*/;
+      default:
+        return /.*/;
+    }
+  }, [type]);
+
   // Validate files
   const validateFiles = useCallback((fileList: FileList | null): File[] => {
     if (!fileList) return [];
@@ -52,26 +69,37 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     if (multiple && fileArray.length + files.length > maxFiles) {
       errorMessage = `You can only upload up to ${maxFiles} files`;
       setError(errorMessage);
+      toast({
+        title: "Too many files",
+        description: errorMessage,
+        variant: "destructive"
+      });
       return validFiles;
     }
+
+    const fileTypeRegex = getFileTypeRegex();
 
     // Validate file types and sizes
     for (const file of fileArray) {
       // Check file size
       if (file.size > maxSize * 1024 * 1024) {
         errorMessage = `File ${file.name} is too large. Max size is ${maxSize}MB`;
+        toast({
+          title: "File too large",
+          description: errorMessage,
+          variant: "destructive"
+        });
         continue;
       }
 
-      // For documents, check if it's a PDF, DOC, DOCX
-      if (type === 'document' && !file.type.match(/pdf|doc|docx|text|application\/*/)) {
-        errorMessage = `File ${file.name} is not a valid document`;
-        continue;
-      }
-
-      // For videos, check if it's a video file
-      if (type === 'video' && !file.type.match(/video\/*/)) {
-        errorMessage = `File ${file.name} is not a valid video`;
+      // Check file type
+      if (!file.type.match(fileTypeRegex)) {
+        errorMessage = `File ${file.name} is not a valid ${type}`;
+        toast({
+          title: "Invalid file type",
+          description: errorMessage,
+          variant: "destructive"
+        });
         continue;
       }
 
@@ -85,7 +113,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     }
 
     return validFiles;
-  }, [files, maxFiles, maxSize, multiple, type]);
+  }, [files, maxFiles, maxSize, multiple, type, getFileTypeRegex]);
 
   // Handle dropped files
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -97,8 +125,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     if (validFiles.length > 0) {
       if (multiple) {
         setFiles(prevFiles => [...prevFiles, ...validFiles]);
+        toast({
+          title: "Files added",
+          description: `${validFiles.length} files were added successfully`,
+        });
       } else {
         setFiles([validFiles[0]]);
+        toast({
+          title: "File added",
+          description: `${validFiles[0].name} was added successfully`,
+        });
       }
     }
   }, [multiple, setFiles, validateFiles]);
@@ -109,8 +145,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     if (validFiles.length > 0) {
       if (multiple) {
         setFiles(prevFiles => [...prevFiles, ...validFiles]);
+        toast({
+          title: "Files added",
+          description: `${validFiles.length} files were added successfully`,
+        });
       } else {
         setFiles([validFiles[0]]);
+        toast({
+          title: "File added",
+          description: `${validFiles[0].name} was added successfully`,
+        });
       }
     }
     // Reset the input
@@ -121,7 +165,25 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const removeFile = useCallback((index: number) => {
     setFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
     setError(null);
+    toast({
+      title: "File removed",
+      description: "The file was removed successfully",
+    });
   }, [setFiles]);
+
+  // Get the appropriate icon
+  const getIcon = () => {
+    switch (type) {
+      case 'document':
+        return <File className="h-10 w-10 text-gray-400 mb-2" />;
+      case 'video':
+        return <Video className="h-10 w-10 text-gray-400 mb-2" />;
+      case 'image':
+        return <Upload className="h-10 w-10 text-gray-400 mb-2" />;
+      default:
+        return <File className="h-10 w-10 text-gray-400 mb-2" />;
+    }
+  };
 
   return (
     <div className="w-full">
@@ -139,13 +201,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         onDrop={handleDrop}
       >
         <div className="flex flex-col items-center justify-center py-4">
-          {type === 'document' ? (
-            <File className="h-10 w-10 text-gray-400 mb-2" />
-          ) : (
-            <Video className="h-10 w-10 text-gray-400 mb-2" />
-          )}
+          {getIcon()}
           
-          <p className="text-sm text-gray-600 mb-1">{label}</p>
+          <p className="text-sm text-gray-600 mb-1">{label} {required && <span className="text-red-500">*</span>}</p>
           
           <p className="text-xs text-gray-500 mb-2">
             Drag & drop or{' '}
@@ -155,7 +213,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           </p>
           
           <p className="text-xs text-gray-500">
-            {type === 'document' ? 'PDF, DOC, DOCX' : 'MP4, MOV, WebM'} up to {maxSize}MB
+            {type === 'document' ? 'PDF, DOC, DOCX' : type === 'image' ? 'JPG, PNG, GIF' : 'MP4, MOV, WebM'} up to {maxSize}MB
             {multiple && ` (Max ${maxFiles} files)`}
           </p>
           
