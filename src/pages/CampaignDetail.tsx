@@ -26,6 +26,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const CampaignDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -44,61 +45,73 @@ const CampaignDetail = () => {
       setLoading(true);
       setError(null);
       
-      if (!contract) {
-        // Use mock data if no contract
-        setTimeout(() => {
-          const mockCampaign: Campaign = {
-            id: parseInt(id || '0'),
-            owner: '0x1234567890123456789012345678901234567890',
-            title: 'Clean Water Initiative',
-            description: 'Our mission is to provide clean, safe drinking water to communities in developing regions. Access to clean water is a fundamental human right, yet millions of people worldwide still lack this basic necessity. Your contribution will help us install water purification systems, dig wells, and provide education on water sanitation practices.\n\nOur team has already successfully completed similar projects in 5 different regions, impacting over 10,000 lives. With your support, we aim to reach 20,000 more people within the next year.',
-            target: '5',
-            deadline: Math.floor(Date.now() / 1000) + 2592000, // 30 days from now
-            amountCollected: '2.5',
-            image: 'https://images.unsplash.com/photo-1519593135389-e4145968f52d',
-            documents: ['https://ipfs.io/ipfs/QmDocument1', 'https://ipfs.io/ipfs/QmDocument2'],
-            videos: ['https://ipfs.io/ipfs/QmVideo1'],
-            donors: ['0xDonor1', '0xDonor2', '0xDonor3'],
-            donations: ['1.2', '0.8', '0.5'],
-            isVerified: true
-          };
-          
-          setCampaign(mockCampaign);
-          setLoading(false);
-        }, 1000);
-        return;
-      }
-
       if (!id) {
         setError('Campaign ID not found');
         setLoading(false);
         return;
       }
       
-      // Get campaign from contract
-      const campaignData = await contract.campaigns(id);
-      if (!campaignData.owner) {
+      console.log(`Fetching campaign details for ID: ${id}`);
+      
+      // Fetch campaign from Supabase
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (campaignError) {
+        console.error('Error fetching campaign from Supabase:', campaignError);
+        setError('Failed to load campaign details');
+        setLoading(false);
+        return;
+      }
+      
+      if (!campaignData) {
+        console.error('Campaign not found in Supabase');
         setError('Campaign not found');
         setLoading(false);
         return;
       }
       
-      // Get donors and donations
-      const [donors, donations] = await contract.getDonors(id);
+      console.log('Campaign data from Supabase:', campaignData);
       
-      // Create complete campaign object
-      const campaignWithDonors = {
-        ...campaignData,
-        donors,
-        donations
+      // Get donors and donations from Supabase
+      const { data: donationsData, error: donationsError } = await supabase
+        .from('donations')
+        .select('donor_id, amount')
+        .eq('campaign_id', id);
+      
+      if (donationsError) {
+        console.warn('Error fetching donations:', donationsError);
+      }
+      
+      // Format campaign data to match our Campaign type
+      const formattedCampaign: Campaign = {
+        id: parseInt(id),
+        owner: campaignData.creator_id,
+        title: campaignData.title,
+        description: campaignData.description,
+        target: campaignData.target_amount.toString(),
+        deadline: new Date(campaignData.deadline).getTime() / 1000,
+        amountCollected: campaignData.amount_collected.toString(),
+        image: campaignData.image_url || '',
+        documents: campaignData.documents || [],
+        videos: campaignData.videos || [],
+        donors: donationsData ? donationsData.map(d => d.donor_id) : [],
+        donations: donationsData ? donationsData.map(d => d.amount.toString()) : [],
+        isVerified: campaignData.is_verified
       };
       
-      // Format campaign data
-      const formattedCampaign = formatCampaign(campaignWithDonors, parseInt(id));
       setCampaign(formattedCampaign);
-    } catch (error) {
-      console.error('Error fetching campaign details:', error);
+    } catch (error: any) {
+      console.error('Error in fetchCampaignDetails:', error);
       setError('Failed to load campaign details');
+      toast({
+        title: 'Error',
+        description: 'There was a problem loading the campaign details',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
@@ -135,32 +148,75 @@ const CampaignDetail = () => {
         return;
       }
       
-      // Convert to wei
-      const weiAmount = ethers.utils.parseEther(donationAmount);
-      
-      // Make donation transaction
-      const tx = await contract.donateToCampaign(campaign.id, { value: weiAmount });
-      
-      toast({
-        title: 'Donation Processing',
-        description: 'Your donation is being processed.',
-      });
-      
-      // Wait for transaction confirmation
-      await tx.wait();
-      
-      toast({
-        title: 'Donation Successful',
-        description: `You have donated ${donationAmount} ETH to this campaign`,
-        variant: 'default'
-      });
+      try {
+        // Convert to wei
+        const weiAmount = ethers.utils.parseEther(donationAmount);
+        
+        // Make donation transaction
+        const tx = await contract.donateToCampaign(campaign.id, { value: weiAmount });
+        
+        toast({
+          title: 'Donation Processing',
+          description: 'Your donation is being processed.',
+        });
+        
+        // Wait for transaction confirmation
+        await tx.wait();
+        
+        // Also record donation in Supabase
+        const { data: userData } = await supabase.auth.getUser();
+        
+        if (userData && userData.user) {
+          const { error: donationError } = await supabase
+            .from('donations')
+            .insert({
+              campaign_id: id,
+              donor_id: userData.user.id,
+              amount: parseFloat(donationAmount)
+            });
+            
+          if (donationError) {
+            console.error('Error recording donation in Supabase:', donationError);
+          }
+          
+          // Update campaign collected amount
+          const { error: updateError } = await supabase
+            .from('campaigns')
+            .update({
+              amount_collected: supabase.rpc('increment', { 
+                x: parseFloat(donationAmount),
+                row_id: id,
+                column_name: 'amount_collected',
+                table_name: 'campaigns'
+              })
+            })
+            .eq('id', id);
+            
+          if (updateError) {
+            console.error('Error updating campaign amount:', updateError);
+          }
+        }
+        
+        toast({
+          title: 'Donation Successful',
+          description: `You have donated ${donationAmount} ETH to this campaign`,
+          variant: 'default'
+        });
+      } catch (error: any) {
+        console.error('Blockchain donation error:', error);
+        toast({
+          title: 'Blockchain Error',
+          description: error.message || 'Error during blockchain transaction',
+          variant: 'destructive'
+        });
+      }
       
       // Refresh campaign data
       await fetchCampaignDetails();
       
       // Reset donation amount
       setDonationAmount('0.1');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error donating to campaign:', error);
       toast({
         title: 'Donation Failed',
@@ -184,16 +240,31 @@ const CampaignDetail = () => {
         return;
       }
       
-      // Call verify campaign function
-      const tx = await contract.verifyCampaign(campaign.id);
+      // Update in Supabase
+      const { error: verifyError } = await supabase
+        .from('campaigns')
+        .update({
+          is_verified: true,
+          verified_by: address,
+          verified_at: new Date().toISOString()
+        })
+        .eq('id', id);
+        
+      if (verifyError) {
+        console.error('Error verifying campaign in Supabase:', verifyError);
+        throw verifyError;
+      }
       
-      toast({
-        title: 'Verification Processing',
-        description: 'Campaign verification is being processed.',
-      });
-      
-      // Wait for transaction confirmation
-      await tx.wait();
+      // Call verify campaign function on contract if available
+      try {
+        if (contract.verifyCampaign) {
+          const tx = await contract.verifyCampaign(campaign.id);
+          await tx.wait();
+        }
+      } catch (contractError) {
+        console.error('Error verifying campaign on blockchain:', contractError);
+        // Continue anyway since we updated in Supabase
+      }
       
       toast({
         title: 'Campaign Verified',
@@ -224,7 +295,25 @@ const CampaignDetail = () => {
 
   useEffect(() => {
     fetchCampaignDetails();
-  }, [id, contract]);
+    
+    // Set up real-time subscription for this campaign
+    const channel = supabase
+      .channel(`campaign-${id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'campaigns',
+        filter: `id=eq.${id}`
+      }, (payload) => {
+        console.log('Campaign updated:', payload);
+        fetchCampaignDetails();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
 
   if (loading) {
     return (
