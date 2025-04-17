@@ -1,4 +1,3 @@
-
 // Store image directly in Supabase and return URL instead of using IPFS
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,56 +15,10 @@ export const uploadFileToStorage = async (file: File): Promise<string> => {
     const fileName = `${uuidv4()}.${fileExt}`;
     const filePath = `campaign-images/${fileName}`;
     
-    // First get storage buckets to see if our bucket exists
-    const { data: buckets, error: bucketListError } = await supabase.storage.listBuckets();
-    
-    if (bucketListError) {
-      console.error('Error listing storage buckets:', bucketListError);
-      toast({
-        title: "Storage Error",
-        description: "Could not access storage. Please try again.",
-        variant: "destructive"
-      });
-      throw new Error(`Failed to access storage: ${bucketListError.message}`);
-    }
-    
-    // Check if bucket exists
-    const bucketExists = buckets?.some(bucket => bucket.name === 'campaign-assets');
-    
-    // If bucket doesn't exist, create it - with explicit error handling
-    if (!bucketExists) {
-      console.log('Campaign assets bucket does not exist, creating...');
-      
-      try {
-        const { error: createBucketError } = await supabase.storage.createBucket('campaign-assets', {
-          public: true,
-          fileSizeLimit: 52428800 // 50MB
-        });
-        
-        if (createBucketError) {
-          console.error('Error creating bucket:', createBucketError);
-          toast({
-            title: "Storage Setup Failed",
-            description: `Could not create storage: ${createBucketError.message}`,
-            variant: "destructive"
-          });
-          throw new Error(`Failed to create storage bucket: ${createBucketError.message}`);
-        }
-        
-        console.log('Campaign assets bucket created successfully');
-      } catch (bucketCreationError: any) {
-        console.error('Caught error during bucket creation:', bucketCreationError);
-        toast({
-          title: "Storage Error",
-          description: bucketCreationError.message || "Failed to create storage for images",
-          variant: "destructive"
-        });
-        throw new Error(`Storage setup failed: ${bucketCreationError.message || "Unknown error"}`);
-      }
-    }
-    
-    // Upload file to Supabase Storage with improved error handling
     console.log(`Uploading file ${filePath} to campaign-assets bucket...`);
+    
+    // Upload file directly to Supabase Storage
+    // We assume the bucket exists and is properly configured with RLS policies
     const { data, error: uploadError } = await supabase.storage
       .from('campaign-assets')
       .upload(filePath, file, {
