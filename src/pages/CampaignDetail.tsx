@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
@@ -42,7 +41,6 @@ const CampaignDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Fetch campaign details
   const fetchCampaignDetails = async () => {
     try {
       setLoading(true);
@@ -56,10 +54,14 @@ const CampaignDetail = () => {
       
       console.log(`Fetching campaign details for ID: ${id}`);
       
-      // Fetch campaign from Supabase
       const { data: campaignData, error: campaignError } = await supabase
         .from('campaigns')
-        .select('*')
+        .select(`
+          *,
+          creator:creator_id (
+            display_name
+          )
+        `)
         .eq('id', id)
         .single();
       
@@ -79,7 +81,6 @@ const CampaignDetail = () => {
       
       console.log('Campaign data from Supabase:', campaignData);
       
-      // Get donors and donations from Supabase
       const { data: donationsData, error: donationsError } = await supabase
         .from('donations')
         .select('donor_id, amount')
@@ -89,26 +90,9 @@ const CampaignDetail = () => {
         console.warn('Error fetching donations:', donationsError);
       }
 
-      // Fetch creator profile to get name
-      const { data: creatorProfile, error: creatorError } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', campaignData.creator_id)
-        .single();
+      const creatorProfile = campaignData.creator;
+      setCreatorName(creatorProfile?.display_name || truncateAddress(campaignData.creator_id));
       
-      if (!creatorError && creatorProfile) {
-        setCreatorName(creatorProfile.display_name || truncateAddress(campaignData.creator_id));
-      } else {
-        setCreatorName(truncateAddress(campaignData.creator_id));
-      }
-      
-      // Check current deadline and collected amount to determine if completed
-      const now = Math.floor(Date.now() / 1000);
-      const deadline = new Date(campaignData.deadline).getTime() / 1000;
-      const isCompleted = now > deadline || 
-                          campaignData.amount_collected >= campaignData.target_amount;
-      
-      // Format campaign data to match our Campaign type
       const formattedCampaign: Campaign = {
         id: parseInt(id),
         owner: campaignData.creator_id,
@@ -123,13 +107,12 @@ const CampaignDetail = () => {
         donors: donationsData ? donationsData.map(d => d.donor_id) : [],
         donations: donationsData ? donationsData.map(d => d.amount.toString()) : [],
         isVerified: campaignData.is_verified || false,
-        isCompleted: isCompleted,
-        creatorName: creatorName
+        isCompleted: campaignData.is_completed,
+        creatorName: creatorProfile?.display_name || truncateAddress(campaignData.creator_id)
       };
       
       setCampaign(formattedCampaign);
 
-      // Check if user has already voted
       if (address) {
         const { data: userData } = await supabase.auth.getUser();
         if (userData && userData.user) {
@@ -155,7 +138,6 @@ const CampaignDetail = () => {
     }
   };
 
-  // Donate to campaign
   const donateToCampaign = async () => {
     try {
       if (!isConnected) {
@@ -174,7 +156,6 @@ const CampaignDetail = () => {
       
       setDonating(true);
       
-      // Validate donation amount
       const amount = parseFloat(donationAmount);
       if (isNaN(amount) || amount <= 0) {
         toast({
@@ -186,12 +167,10 @@ const CampaignDetail = () => {
         return;
       }
       
-      // Calculate remaining amount to reach target
       const amountCollected = parseFloat(campaign.amountCollected);
       const target = parseFloat(campaign.target);
       const remainingAmount = target - amountCollected;
       
-      // Ensure donation doesn't exceed remaining amount
       if (amount > remainingAmount) {
         toast({
           title: 'Donation Exceeds Goal',
@@ -203,10 +182,8 @@ const CampaignDetail = () => {
       }
       
       try {
-        // Convert to wei
         const weiAmount = ethers.utils.parseEther(donationAmount);
         
-        // Make donation transaction
         const tx = await contract.donateToCampaign(campaign.id, { value: weiAmount });
         
         toast({
@@ -214,10 +191,8 @@ const CampaignDetail = () => {
           description: 'Your donation is being processed.',
         });
         
-        // Wait for transaction confirmation
         await tx.wait();
         
-        // Also record donation in Supabase
         const { data: userData } = await supabase.auth.getUser();
         
         if (userData && userData.user) {
@@ -233,8 +208,7 @@ const CampaignDetail = () => {
             console.error('Error recording donation in Supabase:', donationError);
           }
           
-          // Update campaign collected amount
-          const newAmount = amountCollected + amount;
+          const newAmount = amountCollected + parseFloat(donationAmount);
           const isNowCompleted = newAmount >= target;
           
           const { error: updateError } = await supabase
@@ -249,7 +223,6 @@ const CampaignDetail = () => {
             console.error('Error updating campaign amount:', updateError);
           }
           
-          // Show verification prompt
           promptForVerification();
         }
         
@@ -267,10 +240,6 @@ const CampaignDetail = () => {
         });
       }
       
-      // Refresh campaign data
-      await fetchCampaignDetails();
-      
-      // Reset donation amount
       setDonationAmount('0.1');
     } catch (error: any) {
       console.error('Error donating to campaign:', error);
@@ -284,7 +253,6 @@ const CampaignDetail = () => {
     }
   };
 
-  // Prompt user to verify campaign after donation
   const promptForVerification = () => {
     if (hasVoted) return;
     
@@ -313,7 +281,6 @@ const CampaignDetail = () => {
     });
   };
 
-  // Handle verification vote
   const handleVerificationVote = async (isVerified: boolean) => {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -327,7 +294,6 @@ const CampaignDetail = () => {
         return;
       }
       
-      // Add verification record
       const { error } = await supabase
         .from('campaign_verifications')
         .insert({
@@ -350,7 +316,6 @@ const CampaignDetail = () => {
         variant: 'default'
       });
       
-      // Refresh to update verification status
       await fetchCampaignDetails();
     } catch (error: any) {
       toast({
@@ -361,7 +326,6 @@ const CampaignDetail = () => {
     }
   };
 
-  // Verify campaign (admin only)
   const verifyCampaign = async () => {
     try {
       if (!contract || !campaign || !isVerifiedCreator) {
@@ -373,7 +337,6 @@ const CampaignDetail = () => {
         return;
       }
       
-      // Update in Supabase
       const { error: verifyError } = await supabase
         .from('campaigns')
         .update({
@@ -388,7 +351,6 @@ const CampaignDetail = () => {
         throw verifyError;
       }
       
-      // Call verify campaign function on contract if available
       try {
         if (contract.verifyCampaign) {
           const tx = await contract.verifyCampaign(campaign.id);
@@ -405,7 +367,6 @@ const CampaignDetail = () => {
         variant: 'default'
       });
       
-      // Refresh campaign data
       await fetchCampaignDetails();
     } catch (error) {
       console.error('Error verifying campaign:', error);
@@ -417,7 +378,6 @@ const CampaignDetail = () => {
     }
   };
 
-  // Share campaign
   const shareCampaign = () => {
     navigator.clipboard.writeText(window.location.href);
     toast({
@@ -429,7 +389,6 @@ const CampaignDetail = () => {
   useEffect(() => {
     fetchCampaignDetails();
     
-    // Set up real-time subscription for this campaign
     const channel = supabase
       .channel(`campaign-${id}`)
       .on('postgres_changes', {
@@ -511,7 +470,6 @@ const CampaignDetail = () => {
         </button>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left column: Campaign details */}
           <div className="lg:col-span-2 space-y-8">
             <div>
               <div className="relative rounded-lg overflow-hidden">
@@ -713,7 +671,6 @@ const CampaignDetail = () => {
             </Tabs>
           </div>
           
-          {/* Right column: Donation widget */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm sticky top-24">
               <div className="p-6">
@@ -745,7 +702,6 @@ const CampaignDetail = () => {
                           value={donationAmount}
                           onChange={(e) => {
                             const value = parseFloat(e.target.value);
-                            // Ensure donation doesn't exceed remaining amount
                             if (isNaN(value) || value <= remainingAmount) {
                               setDonationAmount(e.target.value);
                             } else {
