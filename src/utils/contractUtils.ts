@@ -73,8 +73,10 @@ export const dateToTimestamp = (date: Date): number => {
  * @param amount Amount in ETH
  * @returns Formatted amount string
  */
-export const formatEthAmount = (amount: string): string => {
-  const formatted = parseFloat(amount).toFixed(4);
+export const formatEthAmount = (amount: string | number): string => {
+  // Convert to string if it's a number
+  const amountStr = typeof amount === 'number' ? amount.toString() : amount;
+  const formatted = parseFloat(amountStr).toFixed(4);
   
   // Remove trailing zeros
   return formatted.replace(/\.?0+$/, '') + ' ETH';
@@ -86,9 +88,10 @@ export const formatEthAmount = (amount: string): string => {
  * @param target Target amount
  * @returns Progress percentage (0-100)
  */
-export const calculateProgress = (collected: string, target: string): number => {
-  const collectedNum = parseFloat(collected);
-  const targetNum = parseFloat(target);
+export const calculateProgress = (collected: string | number, target: string | number): number => {
+  // Convert to numbers if they're strings
+  const collectedNum = typeof collected === 'string' ? parseFloat(collected) : collected;
+  const targetNum = typeof target === 'string' ? parseFloat(target) : target;
   
   if (targetNum === 0 || isNaN(targetNum) || isNaN(collectedNum)) {
     return 0;
