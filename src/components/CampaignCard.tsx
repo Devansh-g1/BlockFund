@@ -6,7 +6,7 @@ import { Campaign } from '@/types/campaign';
 import { Progress } from '@/components/ui/progress';
 import { calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAddress } from '@/utils/contractUtils';
 import { Badge } from '@/components/ui/badge';
-import { CalendarIcon, CheckCircle, Users, ShieldCheck, Clock } from 'lucide-react';
+import { CalendarIcon, CheckCircle, Users, ShieldCheck, Clock, Flag, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -22,19 +22,39 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
   const [isGovVerified, setIsGovVerified] = useState<boolean>(false);
   const [userVerificationStatus, setUserVerificationStatus] = useState<boolean | null>(null);
   const [canVote, setCanVote] = useState<boolean>(false);
+  const [creatorName, setCreatorName] = useState<string>('');
+  const isCompleted = campaign.isCompleted || 
+                      parseFloat(campaign.amountCollected) >= parseFloat(campaign.target) ||
+                      campaign.deadline < Math.floor(Date.now() / 1000);
 
   useEffect(() => {
     const fetchVerificationData = async () => {
       try {
-        // Check if campaign is from gov.in email
-        const { data: userData, error: userError } = await supabase.auth
-          .admin.getUserById(campaign.owner);
+        // Get creator's display name
+        const { data: creatorProfile, error: creatorError } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', campaign.owner)
+          .single();
           
-        if (userError) throw userError;
-        
+        if (!creatorError && creatorProfile) {
+          setCreatorName(creatorProfile.display_name || truncateAddress(campaign.owner));
+        } else {
+          setCreatorName(truncateAddress(campaign.owner));
+        }
+
         // Check if email ends with @gov.in
-        const userEmail = userData?.user?.email || '';
-        setIsGovVerified(userEmail.endsWith('@gov.in'));
+        try {
+          const { data: userData } = await supabase.auth
+            .getUser();
+            
+          if (userData && userData.user) {
+            const userEmail = userData?.user?.email || '';
+            setIsGovVerified(userEmail.endsWith('@gov.in'));
+          }
+        } catch (authError) {
+          console.error('Auth error:', authError);
+        }
 
         // Check if current user can vote
         const { data: { user } } = await supabase.auth.getUser();
@@ -60,14 +80,16 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         }
 
         // Check user's verification vote
-        const { data: userVoteData } = await supabase
-          .from('campaign_verifications')
-          .select('is_verified')
-          .eq('campaign_id', campaign.id.toString())
-          .eq('voter_id', user?.id || '')
-          .single();
+        if (user) {
+          const { data: userVoteData } = await supabase
+            .from('campaign_verifications')
+            .select('is_verified')
+            .eq('campaign_id', campaign.id.toString())
+            .eq('voter_id', user?.id || '')
+            .single();
 
-        setUserVerificationStatus(userVoteData?.is_verified ?? null);
+          setUserVerificationStatus(userVoteData?.is_verified ?? null);
+        }
       } catch (error) {
         console.error('Error fetching verification data:', error);
       }
@@ -119,7 +141,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
   return (
     <Link to={`/campaign/${campaign.id}`}>
       <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg border-gray-200 dark:border-gray-800 h-full bg-card text-card-foreground">
-        <div className="aspect-video w-full overflow-hidden">
+        <div className="aspect-video w-full overflow-hidden relative">
           <img 
             src={campaign.image || '/placeholder.svg'} 
             alt={campaign.title} 
@@ -128,12 +150,24 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
               (e.target as HTMLImageElement).src = '/placeholder.svg';
             }}
           />
+          {isCompleted && (
+            <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-40 flex items-center justify-center">
+              <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-200 px-3 py-2">
+                Completed
+              </Badge>
+            </div>
+          )}
         </div>
         
         <CardHeader className="p-4 pb-0">
           <div className="flex justify-between items-start">
             <CardTitle className="text-lg truncate">{campaign.title}</CardTitle>
-            {isGovVerified ? (
+            {isCompleted ? (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800 flex items-center gap-1">
+                <CheckCircle className="h-3 w-3" />
+                <span>Completed</span>
+              </Badge>
+            ) : isGovVerified ? (
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3" />
                 <span>Gov Verified</span>
@@ -150,7 +184,10 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
               </Badge>
             )}
           </div>
-          <div className="text-muted-foreground text-xs mt-1">by {truncateAddress(campaign.owner)}</div>
+          <div className="flex items-center gap-1.5 text-muted-foreground text-xs mt-1">
+            <User className="h-3 w-3" />
+            <span>by {creatorName || truncateAddress(campaign.owner)}</span>
+          </div>
         </CardHeader>
         
         <CardContent className="p-4">
@@ -185,17 +222,25 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         <CardFooter className="p-4 pt-0 border-t border-gray-100 dark:border-gray-800 space-y-2">
           <div className="w-full">
             <div className={`w-full text-center text-xs font-medium py-1 rounded-full ${
-              isGovVerified 
-                ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' 
-                : campaign.isVerified 
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' 
-                  : 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+              isCompleted
+                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
+                : isGovVerified 
+                  ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' 
+                  : campaign.isVerified 
+                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' 
+                    : 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
             }`}>
-              {isGovVerified ? 'Government Verified' : campaign.isVerified ? 'Community Verified' : 'Awaiting Verification'}
+              {isCompleted 
+                ? 'Campaign Completed' 
+                : isGovVerified 
+                  ? 'Government Verified' 
+                  : campaign.isVerified 
+                    ? 'Community Verified' 
+                    : 'Awaiting Verification'}
             </div>
           </div>
           
-          {!isGovVerified && !campaign.isVerified && canVote && (
+          {!isCompleted && !isGovVerified && !campaign.isVerified && canVote && (
             <div className="flex justify-between w-full space-x-2">
               <Button 
                 variant="outline" 
@@ -216,6 +261,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
                   handleVerificationVote(false);
                 }}
               >
+                <Flag className="mr-2 h-4 w-4" />
                 Flag Campaign
               </Button>
             </div>

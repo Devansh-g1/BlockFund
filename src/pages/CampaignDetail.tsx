@@ -20,7 +20,8 @@ import {
   Loader2,
   Video,
   Link as LinkIcon,
-  Share2
+  Share2,
+  User
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +37,8 @@ const CampaignDetail = () => {
   const [donationAmount, setDonationAmount] = useState<string>('0.1');
   const [donating, setDonating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [creatorName, setCreatorName] = useState<string>('');
+  const [hasVoted, setHasVoted] = useState<boolean>(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -85,6 +88,25 @@ const CampaignDetail = () => {
       if (donationsError) {
         console.warn('Error fetching donations:', donationsError);
       }
+
+      // Fetch creator profile to get name
+      const { data: creatorProfile, error: creatorError } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', campaignData.creator_id)
+        .single();
+      
+      if (!creatorError && creatorProfile) {
+        setCreatorName(creatorProfile.display_name || truncateAddress(campaignData.creator_id));
+      } else {
+        setCreatorName(truncateAddress(campaignData.creator_id));
+      }
+      
+      // Check current deadline and collected amount to determine if completed
+      const now = Math.floor(Date.now() / 1000);
+      const deadline = new Date(campaignData.deadline).getTime() / 1000;
+      const isCompleted = now > deadline || 
+                          campaignData.amount_collected >= campaignData.target_amount;
       
       // Format campaign data to match our Campaign type
       const formattedCampaign: Campaign = {
@@ -100,10 +122,26 @@ const CampaignDetail = () => {
         videos: campaignData.videos || [],
         donors: donationsData ? donationsData.map(d => d.donor_id) : [],
         donations: donationsData ? donationsData.map(d => d.amount.toString()) : [],
-        isVerified: campaignData.is_verified
+        isVerified: campaignData.is_verified || false,
+        isCompleted: isCompleted,
+        creatorName: creatorName
       };
       
       setCampaign(formattedCampaign);
+
+      // Check if user has already voted
+      if (address) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData && userData.user) {
+          const { data: verificationData } = await supabase
+            .from('campaign_verifications')
+            .select('*')
+            .eq('campaign_id', id)
+            .eq('voter_id', userData.user.id);
+          
+          setHasVoted(verificationData && verificationData.length > 0);
+        }
+      }
     } catch (error: any) {
       console.error('Error in fetchCampaignDetails:', error);
       setError('Failed to load campaign details');
@@ -148,6 +186,22 @@ const CampaignDetail = () => {
         return;
       }
       
+      // Calculate remaining amount to reach target
+      const amountCollected = parseFloat(campaign.amountCollected);
+      const target = parseFloat(campaign.target);
+      const remainingAmount = target - amountCollected;
+      
+      // Ensure donation doesn't exceed remaining amount
+      if (amount > remainingAmount) {
+        toast({
+          title: 'Donation Exceeds Goal',
+          description: `Maximum donation amount allowed is ${remainingAmount.toFixed(4)} ETH to reach the goal`,
+          variant: 'destructive'
+        });
+        setDonating(false);
+        return;
+      }
+      
       try {
         // Convert to wei
         const weiAmount = ethers.utils.parseEther(donationAmount);
@@ -180,21 +234,23 @@ const CampaignDetail = () => {
           }
           
           // Update campaign collected amount
+          const newAmount = amountCollected + amount;
+          const isNowCompleted = newAmount >= target;
+          
           const { error: updateError } = await supabase
             .from('campaigns')
             .update({
-              amount_collected: supabase.rpc('increment', { 
-                x: parseFloat(donationAmount),
-                row_id: id,
-                column_name: 'amount_collected',
-                table_name: 'campaigns'
-              })
+              amount_collected: newAmount,
+              is_completed: isNowCompleted
             })
             .eq('id', id);
             
           if (updateError) {
             console.error('Error updating campaign amount:', updateError);
           }
+          
+          // Show verification prompt
+          promptForVerification();
         }
         
         toast({
@@ -225,6 +281,83 @@ const CampaignDetail = () => {
       });
     } finally {
       setDonating(false);
+    }
+  };
+
+  // Prompt user to verify campaign after donation
+  const promptForVerification = () => {
+    if (hasVoted) return;
+    
+    toast({
+      title: 'Verification Request',
+      description: 'Would you like to verify this campaign as legitimate?',
+      action: (
+        <div className="flex gap-2 mt-2">
+          <Button 
+            variant="outline" 
+            className="bg-green-500 hover:bg-green-600 text-white"
+            onClick={() => handleVerificationVote(true)}
+          >
+            Yes, Verify
+          </Button>
+          <Button 
+            variant="outline" 
+            className="bg-red-500 hover:bg-red-600 text-white"
+            onClick={() => handleVerificationVote(false)}
+          >
+            No, Flag
+          </Button>
+        </div>
+      ),
+      duration: 10000
+    });
+  };
+
+  // Handle verification vote
+  const handleVerificationVote = async (isVerified: boolean) => {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      
+      if (!userData || !userData.user) {
+        toast({
+          title: 'Authentication Required',
+          description: 'Please log in to verify this campaign',
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      // Add verification record
+      const { error } = await supabase
+        .from('campaign_verifications')
+        .insert({
+          campaign_id: id,
+          voter_id: userData.user.id,
+          is_verified: isVerified
+        });
+        
+      if (error) {
+        throw error;
+      }
+      
+      setHasVoted(true);
+      
+      toast({
+        title: 'Thank You',
+        description: isVerified 
+          ? 'You have verified this campaign as legitimate' 
+          : 'You have flagged this campaign for review',
+        variant: 'default'
+      });
+      
+      // Refresh to update verification status
+      await fetchCampaignDetails();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to record your verification. Please try again.',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -350,7 +483,8 @@ const CampaignDetail = () => {
   const progress = calculateProgress(campaign.amountCollected, campaign.target);
   const timeRemaining = calculateTimeRemaining(campaign.deadline);
   const isOwner = address && address.toLowerCase() === campaign.owner.toLowerCase();
-  const isActive = campaign.deadline > Math.floor(Date.now() / 1000);
+  const isActive = !campaign.isCompleted && campaign.deadline > Math.floor(Date.now() / 1000);
+  const remainingAmount = parseFloat(campaign.target) - parseFloat(campaign.amountCollected);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -390,6 +524,12 @@ const CampaignDetail = () => {
                   }}
                 />
                 <div className="absolute top-4 right-4 flex flex-col space-y-2">
+                  {campaign.isCompleted && (
+                    <Badge className="bg-purple-100 text-purple-800 border border-purple-200 px-3 py-1.5 text-sm flex items-center gap-1.5">
+                      <CheckCircle className="h-4 w-4" />
+                      <span>Completed</span>
+                    </Badge>
+                  )}
                   {campaign.isVerified && (
                     <Badge className="bg-green-100 text-green-800 border border-green-200 px-3 py-1.5 text-sm flex items-center gap-1.5">
                       <CheckCircle className="h-4 w-4" />
@@ -398,7 +538,7 @@ const CampaignDetail = () => {
                   )}
                   {isOwner && (
                     <Badge className="bg-blue-100 text-blue-800 border border-blue-200 px-3 py-1.5 text-sm">
-                      Your Campaign
+                      <span>Your Campaign</span>
                     </Badge>
                   )}
                 </div>
@@ -431,8 +571,11 @@ const CampaignDetail = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center mt-2 text-gray-600">
-                  <span>by {truncateAddress(campaign.owner)}</span>
+                <div className="flex items-center mt-2 text-gray-600 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <User className="h-4 w-4" />
+                    <span>by {campaign.creatorName || truncateAddress(campaign.owner)}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -579,8 +722,16 @@ const CampaignDetail = () => {
                 {!isActive ? (
                   <div className="text-center py-6">
                     <Clock className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-                    <h4 className="text-lg font-medium text-gray-900 mb-1">Campaign Ended</h4>
+                    <h4 className="text-lg font-medium text-gray-900 mb-1">
+                      {campaign.isCompleted ? 'Campaign Completed' : 'Campaign Ended'}
+                    </h4>
                     <p className="text-gray-600">This campaign is no longer accepting donations</p>
+                  </div>
+                ) : remainingAmount <= 0 ? (
+                  <div className="text-center py-6">
+                    <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-3" />
+                    <h4 className="text-lg font-medium text-gray-900 mb-1">Goal Reached</h4>
+                    <p className="text-gray-600">This campaign has reached its funding goal</p>
                   </div>
                 ) : (
                   <>
@@ -592,42 +743,82 @@ const CampaignDetail = () => {
                         <Input
                           type="number"
                           value={donationAmount}
-                          onChange={(e) => setDonationAmount(e.target.value)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            // Ensure donation doesn't exceed remaining amount
+                            if (isNaN(value) || value <= remainingAmount) {
+                              setDonationAmount(e.target.value);
+                            } else {
+                              setDonationAmount(remainingAmount.toString());
+                            }
+                          }}
                           min="0"
                           step="0.01"
+                          max={remainingAmount.toString()}
                           className="pr-12"
                         />
                         <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                           <span className="text-gray-500 sm:text-sm">ETH</span>
                         </div>
                       </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Max donation: {remainingAmount.toFixed(4)} ETH
+                      </p>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-3 mb-6">
                       <Button
                         variant="outline"
-                        onClick={() => setDonationAmount('0.1')}
+                        onClick={() => {
+                          const amount = 0.1;
+                          if (amount <= remainingAmount) {
+                            setDonationAmount('0.1');
+                          } else {
+                            setDonationAmount(remainingAmount.toString());
+                          }
+                        }}
                         className="w-full"
                       >
                         0.1 ETH
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => setDonationAmount('0.5')}
+                        onClick={() => {
+                          const amount = 0.5;
+                          if (amount <= remainingAmount) {
+                            setDonationAmount('0.5');
+                          } else {
+                            setDonationAmount(remainingAmount.toString());
+                          }
+                        }}
                         className="w-full"
                       >
                         0.5 ETH
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => setDonationAmount('1')}
+                        onClick={() => {
+                          const amount = 1;
+                          if (amount <= remainingAmount) {
+                            setDonationAmount('1');
+                          } else {
+                            setDonationAmount(remainingAmount.toString());
+                          }
+                        }}
                         className="w-full"
                       >
                         1 ETH
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => setDonationAmount('2')}
+                        onClick={() => {
+                          const amount = 2;
+                          if (amount <= remainingAmount) {
+                            setDonationAmount('2');
+                          } else {
+                            setDonationAmount(remainingAmount.toString());
+                          }
+                        }}
                         className="w-full"
                       >
                         2 ETH
@@ -654,15 +845,42 @@ const CampaignDetail = () => {
                         You'll need to connect your wallet first
                       </p>
                     )}
+                    
+                    {!hasVoted && campaign.donors.includes(address || '') && (
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <h4 className="text-sm font-medium text-blue-700 mb-2">Verify This Campaign</h4>
+                        <p className="text-xs text-blue-600 mb-3">
+                          As a donor, your opinion helps others. Is this campaign legitimate?
+                        </p>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="w-full bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                            onClick={() => handleVerificationVote(true)}
+                          >
+                            <CheckCircle className="h-3 w-3 mr-1" /> Yes
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="w-full bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                            onClick={() => handleVerificationVote(false)}
+                          >
+                            <AlertCircle className="h-3 w-3 mr-1" /> No
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
                 
                 <div className="border-t border-gray-200 mt-6 pt-6">
                   <div className="flex items-center gap-2 mb-2">
-                    <Wallet className="h-5 w-5 text-gray-500" />
-                    <h4 className="font-medium">Campaign Owner</h4>
+                    <User className="h-5 w-5 text-gray-500" />
+                    <h4 className="font-medium">Campaign Creator</h4>
                   </div>
-                  <p className="text-gray-600">{truncateAddress(campaign.owner)}</p>
+                  <p className="text-gray-600">{campaign.creatorName || truncateAddress(campaign.owner)}</p>
                 </div>
               </div>
             </div>

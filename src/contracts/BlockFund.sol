@@ -17,6 +17,7 @@ contract BlockFund {
         address[] donors;
         uint256[] donations;
         bool isVerified;
+        bool isCompleted;
     }
 
     // Mapping from campaign ID to Campaign
@@ -36,6 +37,7 @@ contract BlockFund {
     event DonationMade(uint256 indexed campaignId, address indexed donor, uint256 amount);
     event CreatorVerified(address indexed creator);
     event CampaignVerified(uint256 indexed campaignId);
+    event CampaignCompleted(uint256 indexed campaignId);
     
     // Constructor
     constructor() {
@@ -80,6 +82,7 @@ contract BlockFund {
         campaign.documents = _documents;
         campaign.videos = _videos;
         campaign.isVerified = false;
+        campaign.isCompleted = false;
         
         numberOfCampaigns++;
         
@@ -93,7 +96,12 @@ contract BlockFund {
         Campaign storage campaign = campaigns[_id];
         
         require(campaign.deadline > block.timestamp, "Campaign deadline has passed");
+        require(!campaign.isCompleted, "Campaign is already completed");
         require(msg.value > 0, "Donation amount must be greater than 0");
+        
+        // Check if donation would exceed the target
+        uint256 remainingAmount = campaign.target - campaign.amountCollected;
+        require(msg.value <= remainingAmount, "Donation exceeds the remaining target amount");
         
         campaign.donors.push(msg.sender);
         campaign.donations.push(msg.value);
@@ -102,6 +110,12 @@ contract BlockFund {
         require(sent, "Failed to send Ether");
         
         campaign.amountCollected += msg.value;
+        
+        // Check if campaign is now completed
+        if (campaign.amountCollected >= campaign.target) {
+            campaign.isCompleted = true;
+            emit CampaignCompleted(_id);
+        }
         
         emit DonationMade(_id, msg.sender, msg.value);
     }
@@ -137,5 +151,17 @@ contract BlockFund {
     // Function to check if a user is a verified creator
     function isVerifiedCreator(address _user) public view returns (bool) {
         return verifiedCreators[_user];
+    }
+
+    // Function to mark a campaign as completed
+    function markCampaignCompleted(uint256 _id) public {
+        Campaign storage campaign = campaigns[_id];
+        
+        // Can be marked as completed if deadline passed or target reached
+        require(block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target, 
+                "Campaign cannot be marked as completed yet");
+        
+        campaign.isCompleted = true;
+        emit CampaignCompleted(_id);
     }
 }
