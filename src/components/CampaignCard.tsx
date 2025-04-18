@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -132,6 +131,55 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
     } catch (error: any) {
       toast({
         title: 'Voting Error',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleDonation = async () => {
+    try {
+      const donationAmount = parseFloat(donationAmount);
+      const remainingAmount = parseFloat(campaign.target) - parseFloat(campaign.amountCollected);
+      
+      if (donationAmount > remainingAmount) {
+        toast({
+          title: "Invalid donation amount",
+          description: `You cannot donate more than the remaining amount needed (${formatEthAmount(remainingAmount)})`,
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast({
+          title: 'Authentication Required',
+          description: 'Please log in to donate to the campaign.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('donations')
+        .insert({
+          campaign_id: campaign.id.toString(),
+          donor_id: user.id,
+          amount: donationAmount
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Donation Submitted',
+        description: `You have successfully donated to this campaign.`,
+        variant: 'default'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Donation Error',
         description: error.message,
         variant: 'destructive'
       });

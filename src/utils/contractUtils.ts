@@ -1,4 +1,3 @@
-
 import { ethers } from 'ethers';
 import { Campaign } from '../types/campaign';
 
@@ -98,7 +97,7 @@ export const calculateProgress = (collected: string | number, target: string | n
   }
   
   const percentage = (collectedNum / targetNum) * 100;
-  return Math.min(percentage, 100); // Cap at 100%
+  return Math.min(Math.max(percentage, 0), 100); // Ensure value is between 0 and 100
 };
 
 /**
