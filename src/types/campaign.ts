@@ -13,8 +13,8 @@ export interface Campaign {
   donors: string[];
   donations: string[];
   isVerified: boolean;
-  isCompleted?: boolean;
-  creatorName?: string;
+  isCompleted: boolean;  // Updated to be non-optional
+  creatorName: string;   // Updated to be non-optional
 }
 
 export interface CampaignFormData {

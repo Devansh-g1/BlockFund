@@ -56,12 +56,7 @@ const CampaignDetail = () => {
       
       const { data: campaignData, error: campaignError } = await supabase
         .from('campaigns')
-        .select(`
-          *,
-          creator:creator_id (
-            display_name
-          )
-        `)
+        .select('*')
         .eq('id', id)
         .single();
       
@@ -81,6 +76,19 @@ const CampaignDetail = () => {
       
       console.log('Campaign data from Supabase:', campaignData);
       
+      const { data: creatorProfile, error: creatorError } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', campaignData.creator_id)
+        .single();
+        
+      let creatorDisplayName = truncateAddress(campaignData.creator_id);
+      if (!creatorError && creatorProfile && creatorProfile.display_name) {
+        creatorDisplayName = creatorProfile.display_name;
+      }
+      
+      setCreatorName(creatorDisplayName);
+      
       const { data: donationsData, error: donationsError } = await supabase
         .from('donations')
         .select('donor_id, amount')
@@ -89,9 +97,6 @@ const CampaignDetail = () => {
       if (donationsError) {
         console.warn('Error fetching donations:', donationsError);
       }
-
-      const creatorProfile = campaignData.creator;
-      setCreatorName(creatorProfile?.display_name || truncateAddress(campaignData.creator_id));
       
       const formattedCampaign: Campaign = {
         id: parseInt(id),
@@ -107,8 +112,9 @@ const CampaignDetail = () => {
         donors: donationsData ? donationsData.map(d => d.donor_id) : [],
         donations: donationsData ? donationsData.map(d => d.amount.toString()) : [],
         isVerified: campaignData.is_verified || false,
-        isCompleted: campaignData.is_completed,
-        creatorName: creatorProfile?.display_name || truncateAddress(campaignData.creator_id)
+        isCompleted: parseFloat(campaignData.amount_collected.toString()) >= parseFloat(campaignData.target_amount.toString()) || 
+                     new Date(campaignData.deadline).getTime() / 1000 < Math.floor(Date.now() / 1000),
+        creatorName: creatorDisplayName
       };
       
       setCampaign(formattedCampaign);
