@@ -6,6 +6,7 @@ import CampaignCard from '@/components/CampaignCard';
 import Header from '@/components/Header';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateProgress } from '@/utils/contractUtils';
 
 const Index = () => {
   const { address, isConnected, connectWallet } = useWeb3();

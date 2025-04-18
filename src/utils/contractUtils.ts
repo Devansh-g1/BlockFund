@@ -84,8 +84,8 @@ export const formatEthAmount = (amount: string | number): string => {
 
 /**
  * Calculate campaign progress percentage
- * @param collected Amount collected
- * @param target Target amount
+ * @param collected Amount collected (string or number)
+ * @param target Target amount (string or number)
  * @returns Progress percentage (0-100)
  */
 export const calculateProgress = (collected: string | number, target: string | number): number => {
