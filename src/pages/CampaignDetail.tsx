@@ -144,8 +144,10 @@ const CampaignDetail = () => {
       };
       
       setCampaign(formattedCampaign);
+      const amountCollectedNum = parseFloat(formattedCampaign.amountCollected);
+      const targetNum = parseFloat(formattedCampaign.target);
       setRealTimeAmountCollected(formattedCampaign.amountCollected);
-      setRealTimeProgress(calculateProgress(formattedCampaign.amountCollected, formattedCampaign.target));
+      setRealTimeProgress(calculateProgress(amountCollectedNum, targetNum));
 
       if (address) {
         const { data: userData } = await supabase.auth.getUser();
@@ -172,5 +174,15 @@ const CampaignDetail = () => {
     }
   };
 
-  // ... rest of the component code remains unchanged
+  useEffect(() => {
+    fetchCampaignDetails();
+  }, []);
+
+  return (
+    <div>
+      {/* Your component JSX */}
+    </div>
+  );
 };
+
+export default CampaignDetail;
