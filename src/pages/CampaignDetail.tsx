@@ -38,6 +38,8 @@ const CampaignDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const [creatorName, setCreatorName] = useState<string>('');
   const [hasVoted, setHasVoted] = useState<boolean>(false);
+  const [realTimeProgress, setRealTimeProgress] = useState<number>(0);
+  const [realTimeAmountCollected, setRealTimeAmountCollected] = useState<string>('0');
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -97,6 +99,30 @@ const CampaignDetail = () => {
       if (donationsError) {
         console.warn('Error fetching donations:', donationsError);
       }
+
+      let totalCollected = 0;
+      if (donationsData && donationsData.length > 0) {
+        totalCollected = donationsData.reduce((sum, donation) => sum + parseFloat(donation.amount.toString()), 0);
+      }
+      
+      if (totalCollected !== parseFloat(campaignData.amount_collected)) {
+        console.log(`Updating amount_collected from ${campaignData.amount_collected} to ${totalCollected}`);
+        
+        try {
+          const { error: updateError } = await supabase
+            .from('campaigns')
+            .update({ amount_collected: totalCollected })
+            .eq('id', id);
+            
+          if (updateError) {
+            console.error('Error updating campaign amount:', updateError);
+          } else {
+            campaignData.amount_collected = totalCollected;
+          }
+        } catch (updateErr) {
+          console.error('Failed to update campaign amount:', updateErr);
+        }
+      }
       
       const formattedCampaign: Campaign = {
         id: parseInt(id),
@@ -118,6 +144,8 @@ const CampaignDetail = () => {
       };
       
       setCampaign(formattedCampaign);
+      setRealTimeAmountCollected(formattedCampaign.amountCollected);
+      setRealTimeProgress(calculateProgress(formattedCampaign.amountCollected, formattedCampaign.target));
 
       if (address) {
         const { data: userData } = await supabase.auth.getUser();
@@ -190,14 +218,32 @@ const CampaignDetail = () => {
       try {
         const weiAmount = ethers.utils.parseEther(donationAmount);
         
-        const tx = await contract.donateToCampaign(campaign.id, { value: weiAmount });
+        setRealTimeAmountCollected((parseFloat(realTimeAmountCollected) + amount).toString());
+        setRealTimeProgress(calculateProgress(
+          (parseFloat(realTimeAmountCollected) + amount).toString(), 
+          campaign.target
+        ));
         
         toast({
           title: 'Donation Processing',
-          description: 'Your donation is being processed.',
+          description: 'Your donation is being processed. Please confirm the transaction in MetaMask.',
+        });
+        
+        const tx = await contract.donateToCampaign(campaign.id, { value: weiAmount });
+        
+        toast({
+          title: 'Transaction Submitted',
+          description: 'Waiting for blockchain confirmation...',
         });
         
         await tx.wait();
+        
+        console.log('Transaction confirmed on the blockchain!');
+        toast({
+          title: 'Transaction Confirmed',
+          description: 'Your donation has been confirmed on the blockchain!',
+          variant: 'default'
+        });
         
         const { data: userData } = await supabase.auth.getUser();
         
@@ -234,11 +280,19 @@ const CampaignDetail = () => {
         
         toast({
           title: 'Donation Successful',
-          description: `You have donated ${donationAmount} ETH to this campaign`,
+          description: `You have donated ${donationAmount} ETH to this campaign. Funds have been transferred to the campaign owner.`,
           variant: 'default'
         });
+        
+        await fetchCampaignDetails();
       } catch (error: any) {
         console.error('Blockchain donation error:', error);
+        
+        if (campaign) {
+          setRealTimeAmountCollected(campaign.amountCollected);
+          setRealTimeProgress(calculateProgress(campaign.amountCollected, campaign.target));
+        }
+        
         toast({
           title: 'Blockchain Error',
           description: error.message || 'Error during blockchain transaction',
@@ -364,7 +418,6 @@ const CampaignDetail = () => {
         }
       } catch (contractError) {
         console.error('Error verifying campaign on blockchain:', contractError);
-        // Continue anyway since we updated in Supabase
       }
       
       toast({
@@ -395,7 +448,7 @@ const CampaignDetail = () => {
   useEffect(() => {
     fetchCampaignDetails();
     
-    const channel = supabase
+    const campaignChannel = supabase
       .channel(`campaign-${id}`)
       .on('postgres_changes', {
         event: '*',
@@ -403,13 +456,27 @@ const CampaignDetail = () => {
         table: 'campaigns',
         filter: `id=eq.${id}`
       }, (payload) => {
-        console.log('Campaign updated:', payload);
+        console.log('Campaign updated in real-time:', payload);
+        fetchCampaignDetails();
+      })
+      .subscribe();
+      
+    const donationChannel = supabase
+      .channel(`donations-${id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'donations',
+        filter: `campaign_id=eq.${id}`
+      }, (payload) => {
+        console.log('New donation received in real-time:', payload);
         fetchCampaignDetails();
       })
       .subscribe();
       
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(campaignChannel);
+      supabase.removeChannel(donationChannel);
     };
   }, [id]);
 
@@ -445,11 +512,11 @@ const CampaignDetail = () => {
     );
   }
 
-  const progress = calculateProgress(campaign.amountCollected, campaign.target);
+  const progress = realTimeProgress || calculateProgress(campaign.amountCollected, campaign.target);
   const timeRemaining = calculateTimeRemaining(campaign.deadline);
   const isOwner = address && address.toLowerCase() === campaign.owner.toLowerCase();
   const isActive = !campaign.isCompleted && campaign.deadline > Math.floor(Date.now() / 1000);
-  const remainingAmount = parseFloat(campaign.target) - parseFloat(campaign.amountCollected);
+  const remainingAmount = parseFloat(campaign.target) - parseFloat(realTimeAmountCollected);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -538,7 +605,7 @@ const CampaignDetail = () => {
                 <div className="flex items-center mt-2 text-gray-600 gap-2">
                   <div className="flex items-center gap-1.5">
                     <User className="h-4 w-4" />
-                    <span>by {campaign.creatorName || truncateAddress(campaign.owner)}</span>
+                    <span>by {campaign.creatorName}</span>
                   </div>
                 </div>
               </div>
@@ -558,7 +625,7 @@ const CampaignDetail = () => {
               
               <div className="mb-6">
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="font-medium">{formatEthAmount(campaign.amountCollected)}</span>
+                  <span className="font-medium">{formatEthAmount(realTimeAmountCollected)}</span>
                   <span className="text-gray-600">raised of {formatEthAmount(campaign.target)} goal</span>
                 </div>
                 <Progress value={progress} className="h-2" />
@@ -842,7 +909,7 @@ const CampaignDetail = () => {
                     <User className="h-5 w-5 text-gray-500" />
                     <h4 className="font-medium">Campaign Creator</h4>
                   </div>
-                  <p className="text-gray-600">{campaign.creatorName || truncateAddress(campaign.owner)}</p>
+                  <p className="text-gray-600">{campaign.creatorName}</p>
                 </div>
               </div>
             </div>

@@ -24,7 +24,9 @@ export const formatCampaign = (campaign: any, id: number): Campaign => {
     donations: campaign.donations?.map((donation: any) => 
       ethers.utils.formatEther(donation.toString())
     ) || [],
-    isVerified: campaign.isVerified
+    isVerified: campaign.isVerified,
+    isCompleted: campaign.isCompleted || false,
+    creatorName: ''  // This will be populated separately
   };
 };
 
