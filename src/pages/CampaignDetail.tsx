@@ -1,9 +1,16 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
 import { Campaign } from '@/types/campaign';
-import { formatCampaign, calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAddress, calculateRemainingAmount } from '@/utils/contractUtils';
+import { 
+  formatCampaign, 
+  calculateProgress, 
+  formatEthAmount, 
+  calculateTimeRemaining, 
+  truncateAddress, 
+  calculateRemainingAmount,
+  sanitizeDonationAmount 
+} from '@/utils/contractUtils';
 import Header from '@/components/Header';
 import { ethers } from 'ethers';
 import { Button } from '@/components/ui/button';
@@ -194,23 +201,14 @@ const CampaignDetail = () => {
         return;
       }
       
-      // Validate and clean the donation amount
-      let donationAmountValue: number;
+      // Validate and format the donation amount
+      let donationInEth: string;
       try {
-        // Remove any non-numeric characters except decimal point
-        const cleanedValue = donationAmount.replace(/[^\d.]/g, '');
-        donationAmountValue = parseFloat(cleanedValue);
-        
-        if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
-          throw new Error("Invalid amount");
-        }
-        
-        // Limit to 18 decimal places (ETH standard)
-        donationAmountValue = parseFloat(donationAmountValue.toFixed(18));
-      } catch (error) {
+        donationInEth = sanitizeDonationAmount(donationAmount);
+      } catch (error: any) {
         toast({
           title: 'Invalid donation',
-          description: 'Please enter a valid donation amount',
+          description: error.message || 'Please enter a valid donation amount greater than 0',
           variant: 'destructive'
         });
         setDonating(false);
@@ -219,6 +217,8 @@ const CampaignDetail = () => {
       
       // Check if donation exceeds remaining amount
       const remainingAmount = calculateRemainingAmount(campaign.amountCollected, campaign.target);
+      const donationAmountValue = parseFloat(donationInEth);
+      
       if (donationAmountValue > remainingAmount) {
         toast({
           title: 'Invalid donation amount',
@@ -253,9 +253,9 @@ const CampaignDetail = () => {
       }
       
       // Convert ETH to Wei for the transaction
-      // Format with exactly 18 decimal places for ethers.js
-      const cleanAmountString = donationAmountValue.toFixed(18);
-      const amountInWei = ethers.utils.parseEther(cleanAmountString);
+      console.log(`Parsing donation amount: "${donationInEth}"`);
+      const amountInWei = ethers.utils.parseEther(donationInEth);
+      console.log(`Amount in Wei: ${amountInWei.toString()}`);
       
       // Call the contract's donateToCampaign function
       const tx = await contract.donateToCampaign(campaign.id, {
@@ -542,7 +542,7 @@ const CampaignDetail = () => {
                         rel="noopener noreferrer"
                         className="flex items-center p-3 rounded-md border hover:bg-accent/50 transition-colors"
                       >
-                        <File className="h-5 w-5 mr-2 text-primary" />
+                        <File className="h-5 w-5 text-primary" />
                         <span className="flex-1 truncate">Document {index + 1}</span>
                         <LinkIcon className="h-4 w-4 text-muted-foreground" />
                       </a>

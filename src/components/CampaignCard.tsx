@@ -1,10 +1,16 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Campaign } from '@/types/campaign';
 import { Progress } from '@/components/ui/progress';
-import { calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAddress, calculateRemainingAmount } from '@/utils/contractUtils';
+import { 
+  calculateProgress, 
+  formatEthAmount, 
+  calculateTimeRemaining, 
+  truncateAddress, 
+  calculateRemainingAmount, 
+  sanitizeDonationAmount 
+} from '@/utils/contractUtils';
 import { Badge } from '@/components/ui/badge';
 import { CalendarIcon, CheckCircle, Users, ShieldCheck, Clock, Flag, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,7 +40,6 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
   useEffect(() => {
     const fetchVerificationData = async () => {
       try {
-        // Get creator's display name
         const { data: creatorProfile, error: creatorError } = await supabase
           .from('profiles')
           .select('display_name')
@@ -47,7 +52,6 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
           setCreatorName(truncateAddress(campaign.owner));
         }
 
-        // Check if email ends with @gov.in
         try {
           const { data: userData } = await supabase.auth
             .getUser();
@@ -60,7 +64,6 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
           console.error('Auth error:', authError);
         }
 
-        // Check if current user can vote
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: donationData } = await supabase
@@ -71,7 +74,6 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
             .single();
 
           if (donationData) {
-            // Check if user has already voted
             const { data: voteData } = await supabase
               .from('campaign_verifications')
               .select('*')
@@ -83,17 +85,14 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
           }
         }
 
-        // Check user's verification vote
-        if (user) {
-          const { data: userVoteData } = await supabase
-            .from('campaign_verifications')
-            .select('is_verified')
-            .eq('campaign_id', campaign.id.toString())
-            .eq('voter_id', user?.id || '')
-            .single();
+        const { data: userVoteData } = await supabase
+          .from('campaign_verifications')
+          .select('is_verified')
+          .eq('campaign_id', campaign.id.toString())
+          .eq('voter_id', user?.id || '')
+          .single();
 
-          setUserVerificationStatus(userVoteData?.is_verified ?? null);
-        }
+        setUserVerificationStatus(userVoteData?.is_verified ?? null);
       } catch (error) {
         console.error('Error fetching verification data:', error);
       }
@@ -151,29 +150,20 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         return;
       }
 
-      // Validate the donation amount - ensure it's a clean number
-      let donationAmountValue: number;
+      let donationInEth: string;
       try {
-        // Remove any non-numeric characters except decimal point
-        const cleanedValue = donationAmount.replace(/[^\d.]/g, '');
-        donationAmountValue = parseFloat(cleanedValue);
-        
-        if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
-          throw new Error("Invalid amount");
-        }
-        
-        // Limit to 18 decimal places (ETH standard)
-        donationAmountValue = parseFloat(donationAmountValue.toFixed(18));
-      } catch (error) {
+        donationInEth = sanitizeDonationAmount(donationAmount);
+      } catch (error: any) {
         toast({
           title: "Invalid donation amount",
-          description: "Please enter a valid donation amount greater than 0",
+          description: error.message || "Please enter a valid donation amount greater than 0",
           variant: "destructive"
         });
         return;
       }
       
       const remainingAmount = calculateRemainingAmount(campaign.amountCollected, campaign.target);
+      const donationAmountValue = parseFloat(donationInEth);
       
       if (donationAmountValue > remainingAmount) {
         toast({
@@ -193,12 +183,10 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         return;
       }
       
-      // Convert ETH to Wei for the transaction - ensure we have a clean string
-      // Format with exactly 18 decimal places for ethers.js
-      const cleanAmountString = donationAmountValue.toFixed(18);
-      const amountInWei = ethers.utils.parseEther(cleanAmountString);
+      console.log(`Parsing donation amount: "${donationInEth}"`);
+      const amountInWei = ethers.utils.parseEther(donationInEth);
+      console.log(`Amount in Wei: ${amountInWei.toString()}`);
       
-      // Call the contract's donateToCampaign function
       const tx = await contract.donateToCampaign(campaign.id, {
         value: amountInWei
       });
@@ -209,10 +197,8 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         variant: "default"
       });
       
-      // Wait for the transaction to be mined
       await tx.wait();
       
-      // After transaction is confirmed, also record in Supabase
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {

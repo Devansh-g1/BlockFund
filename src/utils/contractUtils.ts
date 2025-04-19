@@ -134,3 +134,39 @@ export const calculateRemainingAmount = (amountCollected: string | number, targe
   
   return Math.max(0, target - collected);
 };
+
+/**
+ * Sanitizes and formats a donation amount for blockchain transactions
+ * This ensures the value is always a valid string for ethers.utils.parseEther
+ * 
+ * @param amount The raw donation amount (string or number)
+ * @returns A properly formatted string that can safely be used with ethers.utils.parseEther
+ */
+export const sanitizeDonationAmount = (amount: string | number): string => {
+  // If it's already a number, convert to string with fixed precision
+  if (typeof amount === 'number') {
+    // Ensure the number is valid and positive
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error("Invalid donation amount");
+    }
+    // Format to exactly 18 decimal places for ethers.js
+    return amount.toFixed(18);
+  }
+  
+  // If it's a string, clean and validate it
+  if (typeof amount === 'string') {
+    // Remove any non-numeric characters except decimal point
+    const cleanedValue = amount.replace(/[^\d.]/g, '');
+    const numValue = parseFloat(cleanedValue);
+    
+    // Validate the cleaned value
+    if (isNaN(numValue) || numValue <= 0) {
+      throw new Error("Invalid donation amount");
+    }
+    
+    // Format to exactly 18 decimal places for ethers.js
+    return numValue.toFixed(18);
+  }
+  
+  throw new Error("Invalid donation amount");
+};
