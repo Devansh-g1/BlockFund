@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Campaign } from '@/types/campaign';
 import { Progress } from '@/components/ui/progress';
-import { calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAddress } from '@/utils/contractUtils';
+import { calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAddress, calculateRemainingAmount } from '@/utils/contractUtils';
 import { Badge } from '@/components/ui/badge';
 import { CalendarIcon, CheckCircle, Users, ShieldCheck, Clock, Flag, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useWeb3 } from '@/context/Web3Context';
 
 interface CampaignCardProps {
   campaign: Campaign;
@@ -16,12 +18,14 @@ interface CampaignCardProps {
 
 const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
   const { toast } = useToast();
+  const { contract, address, isConnected, connectWallet } = useWeb3();
   const progress = calculateProgress(campaign.amountCollected, campaign.target);
   const timeRemaining = calculateTimeRemaining(campaign.deadline);
   const [isGovVerified, setIsGovVerified] = useState<boolean>(false);
   const [userVerificationStatus, setUserVerificationStatus] = useState<boolean | null>(null);
   const [canVote, setCanVote] = useState<boolean>(false);
   const [creatorName, setCreatorName] = useState<string>('');
+  const [donationAmount, setDonationAmount] = useState<string>('0.1');
   const isCompleted = campaign.isCompleted || 
                       parseFloat(campaign.amountCollected) >= parseFloat(campaign.target) ||
                       campaign.deadline < Math.floor(Date.now() / 1000);
@@ -137,12 +141,28 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
     }
   };
 
-  const handleDonation = async () => {
+  const handleDonation = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    
     try {
-      const donationAmount = parseFloat(donationAmount);
-      const remainingAmount = parseFloat(campaign.target) - parseFloat(campaign.amountCollected);
+      if (!isConnected) {
+        await connectWallet();
+        return;
+      }
+
+      const donationAmountValue = parseFloat(donationAmount);
+      const remainingAmount = calculateRemainingAmount(campaign.amountCollected, campaign.target);
       
-      if (donationAmount > remainingAmount) {
+      if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
+        toast({
+          title: "Invalid donation amount",
+          description: "Please enter a valid donation amount greater than 0",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (donationAmountValue > remainingAmount) {
         toast({
           title: "Invalid donation amount",
           description: `You cannot donate more than the remaining amount needed (${formatEthAmount(remainingAmount)})`,
@@ -151,37 +171,56 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         return;
       }
       
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
+      if (!contract) {
         toast({
-          title: 'Authentication Required',
-          description: 'Please log in to donate to the campaign.',
-          variant: 'destructive'
+          title: "Contract not connected",
+          description: "Please make sure your wallet is connected correctly",
+          variant: "destructive"
         });
         return;
       }
-
-      const { error } = await supabase
-        .from('donations')
-        .insert({
-          campaign_id: campaign.id.toString(),
-          donor_id: user.id,
-          amount: donationAmount
-        });
-
-      if (error) throw error;
-
+      
+      // Convert ETH to Wei for the transaction
+      const amountInWei = ethers.utils.parseEther(donationAmountValue.toString());
+      
+      // Call the contract's donateToCampaign function
+      const tx = await contract.donateToCampaign(campaign.id, {
+        value: amountInWei
+      });
+      
       toast({
-        title: 'Donation Submitted',
-        description: `You have successfully donated to this campaign.`,
-        variant: 'default'
+        title: "Transaction submitted",
+        description: "Waiting for transaction confirmation...",
+        variant: "default"
+      });
+      
+      // Wait for the transaction to be mined
+      await tx.wait();
+      
+      // After transaction is confirmed, also record in Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        await supabase
+          .from('donations')
+          .insert({
+            campaign_id: campaign.id.toString(),
+            donor_id: user.id,
+            amount: donationAmountValue
+          });
+      }
+      
+      toast({
+        title: "Donation successful",
+        description: `Thank you for your donation of ${donationAmountValue} ETH!`,
+        variant: "default"
       });
     } catch (error: any) {
+      console.error("Donation error:", error);
       toast({
-        title: 'Donation Error',
-        description: error.message,
-        variant: 'destructive'
+        title: "Donation failed",
+        description: error.message || "There was a problem processing your donation",
+        variant: "destructive"
       });
     }
   };

@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
 import { Campaign } from '@/types/campaign';
-import { formatCampaign, calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAddress } from '@/utils/contractUtils';
+import { formatCampaign, calculateProgress, formatEthAmount, calculateTimeRemaining, truncateAddress, calculateRemainingAmount } from '@/utils/contractUtils';
 import Header from '@/components/Header';
 import { ethers } from 'ethers';
 import { Button } from '@/components/ui/button';
@@ -43,130 +43,142 @@ const CampaignDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchCampaignDetails = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        if (!id) {
-          setError('Campaign ID not found');
-          setLoading(false);
-          return;
-        }
-        
-        console.log(`Fetching campaign details for ID: ${id}`);
-        
-        const { data: campaignData, error: campaignError } = await supabase
-          .from('campaigns')
-          .select('*')
-          .eq('id', id)
-          .single();
-        
-        if (campaignError) {
-          console.error('Error fetching campaign from Supabase:', campaignError);
-          setError('Failed to load campaign details');
-          setLoading(false);
-          return;
-        }
-        
-        if (!campaignData) {
-          console.error('Campaign not found in Supabase');
-          setError('Campaign not found');
-          setLoading(false);
-          return;
-        }
-        
-        console.log('Campaign data from Supabase:', campaignData);
-        
-        const { data: creatorProfile, error: creatorError } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', campaignData.creator_id)
-          .single();
-        
-        let creatorDisplayName = truncateAddress(campaignData.creator_id);
-        if (!creatorError && creatorProfile && creatorProfile.display_name) {
-          creatorDisplayName = creatorProfile.display_name;
-        }
-        
-        setCreatorName(creatorDisplayName);
-        
-        const { data: donationsData, error: donationsError } = await supabase
-          .from('donations')
-          .select('donor_id, amount')
-          .eq('campaign_id', id);
-        
-        if (donationsError) {
-          console.warn('Error fetching donations:', donationsError);
-        }
-
-        let totalCollected = 0;
-        if (donationsData && donationsData.length > 0) {
-          totalCollected = donationsData.reduce((sum, donation) => sum + parseFloat(donation.amount.toString()), 0);
-        }
-        
-        if (totalCollected !== parseFloat(campaignData.amount_collected)) {
-          console.log(`Updating amount_collected from ${campaignData.amount_collected} to ${totalCollected}`);
-          
-          try {
-            const { error: updateError } = await supabase
-              .from('campaigns')
-              .update({ amount_collected: totalCollected })
-              .eq('id', id);
-              
-            if (updateError) {
-              console.error('Error updating campaign amount:', updateError);
-            } else {
-              campaignData.amount_collected = totalCollected;
-            }
-          } catch (updateErr) {
-            console.error('Failed to update campaign amount:', updateErr);
-          }
-        }
-        
-        const formattedCampaign: Campaign = {
-          id: parseInt(id),
-          owner: campaignData.creator_id,
-          title: campaignData.title,
-          description: campaignData.description,
-          target: campaignData.target_amount.toString(),
-          deadline: new Date(campaignData.deadline).getTime() / 1000,
-          amountCollected: campaignData.amount_collected.toString(),
-          image: campaignData.image_url || '',
-          documents: campaignData.documents || [],
-          videos: campaignData.videos || [],
-          donors: donationsData ? donationsData.map(d => d.donor_id) : [],
-          donations: donationsData ? donationsData.map(d => d.amount.toString()) : [],
-          isVerified: campaignData.is_verified || false,
-          isCompleted: parseFloat(campaignData.amount_collected.toString()) >= parseFloat(campaignData.target_amount.toString()) || 
-                       new Date(campaignData.deadline).getTime() / 1000 < Math.floor(Date.now() / 1000),
-          creatorName: creatorDisplayName
-        };
-        
-        setCampaign(formattedCampaign);
-        
-        if (campaignData) {
-          const amountCollectedNum = parseFloat(campaignData.amount_collected.toString());
-          const targetNum = parseFloat(campaignData.target_amount.toString());
-          setRealTimeAmountCollected(amountCollectedNum.toString());
-          setRealTimeProgress(calculateProgress(amountCollectedNum, targetNum));
-        }
-      } catch (error: any) {
-        console.error('Error in fetchCampaignDetails:', error);
-        setError('Failed to load campaign details');
-        toast({
-          title: 'Error',
-          description: 'There was a problem loading the campaign details',
-          variant: 'destructive'
-        });
-      } finally {
+  const fetchCampaignDetails = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (!id) {
+        setError('Campaign ID not found');
         setLoading(false);
+        return;
       }
-    };
-    
-    fetchCampaignDetails();
+      
+      console.log(`Fetching campaign details for ID: ${id}`);
+      
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (campaignError) {
+        console.error('Error fetching campaign from Supabase:', campaignError);
+        setError('Failed to load campaign details');
+        setLoading(false);
+        return;
+      }
+      
+      if (!campaignData) {
+        console.error('Campaign not found in Supabase');
+        setError('Campaign not found');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Campaign data from Supabase:', campaignData);
+      
+      const { data: creatorProfile, error: creatorError } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', campaignData.creator_id)
+        .single();
+      
+      let creatorDisplayName = truncateAddress(campaignData.creator_id);
+      if (!creatorError && creatorProfile && creatorProfile.display_name) {
+        creatorDisplayName = creatorProfile.display_name;
+      }
+      
+      setCreatorName(creatorDisplayName);
+      
+      const { data: donationsData, error: donationsError } = await supabase
+        .from('donations')
+        .select('donor_id, amount')
+        .eq('campaign_id', id);
+      
+      if (donationsError) {
+        console.warn('Error fetching donations:', donationsError);
+      }
+
+      let totalCollected = 0;
+      if (donationsData && donationsData.length > 0) {
+        totalCollected = donationsData.reduce((sum, donation) => sum + parseFloat(donation.amount.toString()), 0);
+      }
+      
+      if (totalCollected !== parseFloat(campaignData.amount_collected)) {
+        console.log(`Updating amount_collected from ${campaignData.amount_collected} to ${totalCollected}`);
+        
+        try {
+          const { error: updateError } = await supabase
+            .from('campaigns')
+            .update({ amount_collected: totalCollected })
+            .eq('id', id);
+            
+          if (updateError) {
+            console.error('Error updating campaign amount:', updateError);
+          } else {
+            campaignData.amount_collected = totalCollected;
+          }
+        } catch (updateErr) {
+          console.error('Failed to update campaign amount:', updateErr);
+        }
+      }
+      
+      const formattedCampaign: Campaign = {
+        id: parseInt(id),
+        owner: campaignData.creator_id,
+        title: campaignData.title,
+        description: campaignData.description,
+        target: campaignData.target_amount.toString(),
+        deadline: new Date(campaignData.deadline).getTime() / 1000,
+        amountCollected: campaignData.amount_collected.toString(),
+        image: campaignData.image_url || '',
+        documents: campaignData.documents || [],
+        videos: campaignData.videos || [],
+        donors: donationsData ? donationsData.map(d => d.donor_id) : [],
+        donations: donationsData ? donationsData.map(d => d.amount.toString()) : [],
+        isVerified: campaignData.is_verified || false,
+        isCompleted: parseFloat(campaignData.amount_collected.toString()) >= parseFloat(campaignData.target_amount.toString()) || 
+                      new Date(campaignData.deadline).getTime() / 1000 < Math.floor(Date.now() / 1000),
+        creatorName: creatorDisplayName
+      };
+      
+      setCampaign(formattedCampaign);
+      
+      if (campaignData) {
+        const amountCollectedNum = parseFloat(campaignData.amount_collected.toString());
+        const targetNum = parseFloat(campaignData.target_amount.toString());
+        setRealTimeAmountCollected(amountCollectedNum.toString());
+        setRealTimeProgress(calculateProgress(amountCollectedNum, targetNum));
+      }
+      
+      // Check if user has already voted
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: voteData } = await supabase
+          .from('campaign_verifications')
+          .select('*')
+          .eq('campaign_id', id)
+          .eq('voter_id', user.id);
+          
+        setHasVoted(voteData && voteData.length > 0);
+      }
+    } catch (error: any) {
+      console.error('Error in fetchCampaignDetails:', error);
+      setError('Failed to load campaign details');
+      toast({
+        title: 'Error',
+        description: 'There was a problem loading the campaign details',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
   }, [id, address]);
+
+  useEffect(() => {
+    fetchCampaignDetails();
+  }, [fetchCampaignDetails]);
 
   // Function to handle donations
   const handleDonation = async () => {
@@ -181,10 +193,23 @@ const CampaignDetail = () => {
       }
       
       // Check donation amount
-      if (parseFloat(donationAmount) <= 0) {
+      const donationAmountValue = parseFloat(donationAmount);
+      if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
         toast({
           title: 'Invalid donation',
           description: 'Please enter a valid donation amount',
+          variant: 'destructive'
+        });
+        setDonating(false);
+        return;
+      }
+      
+      // Check if donation exceeds remaining amount
+      const remainingAmount = calculateRemainingAmount(campaign.amountCollected, campaign.target);
+      if (donationAmountValue > remainingAmount) {
+        toast({
+          title: 'Invalid donation amount',
+          description: `You cannot donate more than the remaining amount needed (${formatEthAmount(remainingAmount)})`,
           variant: 'destructive'
         });
         setDonating(false);
@@ -204,13 +229,40 @@ const CampaignDetail = () => {
         return;
       }
       
+      if (!contract) {
+        toast({
+          title: 'Contract not connected',
+          description: 'Please make sure your wallet is connected correctly',
+          variant: 'destructive'
+        });
+        setDonating(false);
+        return;
+      }
+      
+      // Convert ETH to Wei for the transaction
+      const amountInWei = ethers.utils.parseEther(donationAmount);
+      
+      // Call the contract's donateToCampaign function
+      const tx = await contract.donateToCampaign(campaign.id, {
+        value: amountInWei
+      });
+      
+      toast({
+        title: 'Transaction submitted',
+        description: 'Please confirm the transaction in MetaMask',
+        variant: 'default'
+      });
+      
+      // Wait for the transaction to be mined
+      await tx.wait();
+      
       // Insert donation record
       const { error: donationError } = await supabase
         .from('donations')
         .insert({
           campaign_id: id,
           donor_id: userData.user.id,
-          amount: parseFloat(donationAmount)
+          amount: donationAmountValue
         });
       
       if (donationError) {
@@ -219,7 +271,7 @@ const CampaignDetail = () => {
       }
       
       // Update campaign total
-      const newTotal = parseFloat(campaign.amountCollected) + parseFloat(donationAmount);
+      const newTotal = parseFloat(campaign.amountCollected) + donationAmountValue;
       const { error: updateError } = await supabase
         .from('campaigns')
         .update({ amount_collected: newTotal })
@@ -312,6 +364,9 @@ const CampaignDetail = () => {
         description: `You have ${vote ? 'verified' : 'flagged'} this campaign`,
         variant: 'default'
       });
+      
+      // Refresh campaign details to update verification status
+      fetchCampaignDetails();
     } catch (error: any) {
       console.error('Verification vote error:', error);
       toast({
@@ -548,6 +603,9 @@ const CampaignDetail = () => {
                         onChange={(e) => setDonationAmount(e.target.value)}
                         className="w-full"
                       />
+                      <div className="text-xs text-muted-foreground">
+                        Maximum donation: {formatEthAmount(calculateRemainingAmount(campaign.amountCollected, campaign.target))}
+                      </div>
                     </div>
                     
                     <Button 

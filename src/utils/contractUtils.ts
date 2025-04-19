@@ -1,3 +1,4 @@
+
 import { ethers } from 'ethers';
 import { Campaign } from '../types/campaign';
 
@@ -109,4 +110,17 @@ export const truncateAddress = (address: string): string => {
   if (!address) return '';
   
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
+
+/**
+ * Calculates the remaining amount that can be donated to a campaign
+ * @param amountCollected Amount already collected
+ * @param targetAmount Target amount to be reached
+ * @returns Remaining amount that can be donated
+ */
+export const calculateRemainingAmount = (amountCollected: string | number, targetAmount: string | number): number => {
+  const collected = typeof amountCollected === 'string' ? parseFloat(amountCollected) : amountCollected;
+  const target = typeof targetAmount === 'string' ? parseFloat(targetAmount) : targetAmount;
+  
+  return Math.max(0, target - collected);
 };
