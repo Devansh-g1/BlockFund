@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -150,8 +151,8 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         return;
       }
 
+      // Parse and validate donation amount
       const donationAmountValue = parseFloat(donationAmount);
-      const remainingAmount = calculateRemainingAmount(campaign.amountCollected, campaign.target);
       
       if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
         toast({
@@ -161,6 +162,8 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         });
         return;
       }
+      
+      const remainingAmount = calculateRemainingAmount(campaign.amountCollected, campaign.target);
       
       if (donationAmountValue > remainingAmount) {
         toast({
@@ -180,8 +183,9 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         return;
       }
       
-      // Convert ETH to Wei for the transaction
-      const amountInWei = ethers.utils.parseEther(donationAmountValue.toString());
+      // Convert ETH to Wei for the transaction - use a proper string representation
+      const donationString = donationAmountValue.toString();
+      const amountInWei = ethers.utils.parseEther(donationString);
       
       // Call the contract's donateToCampaign function
       const tx = await contract.donateToCampaign(campaign.id, {

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWeb3 } from '@/context/Web3Context';
@@ -189,6 +190,7 @@ const CampaignDetail = () => {
       
       if (!isConnected) {
         await connectWallet();
+        setDonating(false);
         return;
       }
       
@@ -240,7 +242,9 @@ const CampaignDetail = () => {
       }
       
       // Convert ETH to Wei for the transaction
-      const amountInWei = ethers.utils.parseEther(donationAmount);
+      // Fix: Make sure we're using a valid string representation of the number
+      const donationString = donationAmountValue.toString();
+      const amountInWei = ethers.utils.parseEther(donationString);
       
       // Call the contract's donateToCampaign function
       const tx = await contract.donateToCampaign(campaign.id, {
@@ -284,7 +288,7 @@ const CampaignDetail = () => {
       
       // Update UI
       setRealTimeAmountCollected(newTotal.toString());
-      setRealTimeProgress(calculateProgress(newTotal, parseFloat(campaign.target)));
+      setRealTimeProgress(calculateProgress(newTotal.toString(), campaign.target));
       
       toast({
         title: 'Donation successful',
