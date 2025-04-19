@@ -151,10 +151,20 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         return;
       }
 
-      // Parse and validate donation amount
-      const donationAmountValue = parseFloat(donationAmount);
-      
-      if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
+      // Validate the donation amount - ensure it's a clean number
+      let donationAmountValue: number;
+      try {
+        // Remove any non-numeric characters except decimal point
+        const cleanedValue = donationAmount.replace(/[^\d.]/g, '');
+        donationAmountValue = parseFloat(cleanedValue);
+        
+        if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
+          throw new Error("Invalid amount");
+        }
+        
+        // Limit to 18 decimal places (ETH standard)
+        donationAmountValue = parseFloat(donationAmountValue.toFixed(18));
+      } catch (error) {
         toast({
           title: "Invalid donation amount",
           description: "Please enter a valid donation amount greater than 0",
@@ -183,9 +193,10 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         return;
       }
       
-      // Convert ETH to Wei for the transaction - use a proper string representation
-      const donationString = donationAmountValue.toString();
-      const amountInWei = ethers.utils.parseEther(donationString);
+      // Convert ETH to Wei for the transaction - ensure we have a clean string
+      // Format with exactly 18 decimal places for ethers.js
+      const cleanAmountString = donationAmountValue.toFixed(18);
+      const amountInWei = ethers.utils.parseEther(cleanAmountString);
       
       // Call the contract's donateToCampaign function
       const tx = await contract.donateToCampaign(campaign.id, {

@@ -194,9 +194,20 @@ const CampaignDetail = () => {
         return;
       }
       
-      // Check donation amount
-      const donationAmountValue = parseFloat(donationAmount);
-      if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
+      // Validate and clean the donation amount
+      let donationAmountValue: number;
+      try {
+        // Remove any non-numeric characters except decimal point
+        const cleanedValue = donationAmount.replace(/[^\d.]/g, '');
+        donationAmountValue = parseFloat(cleanedValue);
+        
+        if (isNaN(donationAmountValue) || donationAmountValue <= 0) {
+          throw new Error("Invalid amount");
+        }
+        
+        // Limit to 18 decimal places (ETH standard)
+        donationAmountValue = parseFloat(donationAmountValue.toFixed(18));
+      } catch (error) {
         toast({
           title: 'Invalid donation',
           description: 'Please enter a valid donation amount',
@@ -242,9 +253,9 @@ const CampaignDetail = () => {
       }
       
       // Convert ETH to Wei for the transaction
-      // Fix: Make sure we're using a valid string representation of the number
-      const donationString = donationAmountValue.toString();
-      const amountInWei = ethers.utils.parseEther(donationString);
+      // Format with exactly 18 decimal places for ethers.js
+      const cleanAmountString = donationAmountValue.toFixed(18);
+      const amountInWei = ethers.utils.parseEther(cleanAmountString);
       
       // Call the contract's donateToCampaign function
       const tx = await contract.donateToCampaign(campaign.id, {
@@ -286,13 +297,13 @@ const CampaignDetail = () => {
         throw new Error('Failed to update campaign');
       }
       
-      // Update UI
+      // Update UI with string values for consistency
       setRealTimeAmountCollected(newTotal.toString());
       setRealTimeProgress(calculateProgress(newTotal.toString(), campaign.target));
       
       toast({
         title: 'Donation successful',
-        description: `Thank you for your donation of ${donationAmount} ETH!`,
+        description: `Thank you for your donation of ${donationAmountValue} ETH!`,
         variant: 'default'
       });
       

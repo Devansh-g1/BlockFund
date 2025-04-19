@@ -76,7 +76,12 @@ export const dateToTimestamp = (date: Date): number => {
 export const formatEthAmount = (amount: string | number): string => {
   // Convert to string if it's a number
   const amountStr = typeof amount === 'number' ? amount.toString() : amount;
-  const formatted = parseFloat(amountStr).toFixed(4);
+  
+  // Ensure it's a valid number
+  const parsedAmount = parseFloat(amountStr);
+  if (isNaN(parsedAmount)) return '0 ETH';
+  
+  const formatted = parsedAmount.toFixed(4);
   
   // Remove trailing zeros
   return formatted.replace(/\.?0+$/, '') + ' ETH';
@@ -119,8 +124,13 @@ export const truncateAddress = (address: string): string => {
  * @returns Remaining amount that can be donated
  */
 export const calculateRemainingAmount = (amountCollected: string | number, targetAmount: string | number): number => {
-  const collected = typeof amountCollected === 'string' ? parseFloat(amountCollected) : amountCollected;
-  const target = typeof targetAmount === 'string' ? parseFloat(targetAmount) : targetAmount;
+  // Ensure we have valid numbers by using parseFloat and handling potential NaN values
+  let collected = typeof amountCollected === 'string' ? parseFloat(amountCollected) : amountCollected;
+  let target = typeof targetAmount === 'string' ? parseFloat(targetAmount) : targetAmount;
+  
+  // Handle NaN cases
+  if (isNaN(collected)) collected = 0;
+  if (isNaN(target)) target = 0;
   
   return Math.max(0, target - collected);
 };
