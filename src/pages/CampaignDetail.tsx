@@ -437,7 +437,7 @@ const CampaignDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-bg">
         <Header />
         <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[70vh]">
           <div className="flex flex-col items-center space-y-4">
@@ -451,13 +451,13 @@ const CampaignDetail = () => {
 
   if (error || !campaign) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-bg">
         <Header />
         <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[70vh]">
           <div className="text-center space-y-4 max-w-md mx-auto">
             <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
             <h2 className="text-2xl font-bold text-foreground">Campaign Not Found</h2>
-            <p className="text-muted-foreground">{error || 'The campaign you are looking for does not exist or has been removed.'}</p>
+            <p className="text-text-600">{error || 'The campaign you are looking for does not exist or has been removed.'}</p>
             <Button onClick={() => navigate('/')}>Back to Home</Button>
           </div>
         </div>
@@ -470,7 +470,7 @@ const CampaignDetail = () => {
                       campaign.deadline < Math.floor(Date.now() / 1000);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-bg">
       <Header />
       <div className="container mx-auto px-4 py-8">
         {/* Campaign Header */}
@@ -478,14 +478,14 @@ const CampaignDetail = () => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{campaign.title}</h1>
             <div className="flex items-center gap-2 mt-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">by {campaign.creatorName}</span>
+              <User className="h-4 w-4 text-text-600" />
+              <span className="text-sm text-text-600">by {campaign.creatorName}</span>
             </div>
           </div>
           
           <div className="flex flex-wrap gap-2">
             {isCompleted ? (
-              <Badge variant="outline" className="bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400">
+              <Badge variant="outline" className="bg-accent-400 opacity-80 text-text">
                 <CheckCircle className="h-3.5 w-3.5 mr-1" />
                 Completed
               </Badge>
@@ -504,7 +504,7 @@ const CampaignDetail = () => {
             <Button 
               variant="outline" 
               size="sm" 
-              className="flex items-center gap-1" 
+              className="flex bg-secondary-200 text-text items-center gap-1" 
               onClick={handleShare}
             >
               <Share2 className="h-4 w-4" />
@@ -529,20 +529,20 @@ const CampaignDetail = () => {
             </div>
             
             <Tabs defaultValue="about" className="w-full">
-              <TabsList className="w-full grid grid-cols-3">
+              <TabsList className="w-full grid grid-cols-3 bg-secondary-400 text-text">
                 <TabsTrigger value="about">About</TabsTrigger>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="videos">Videos</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="about" className="p-4 mt-2 rounded-md border bg-card">
+              <TabsContent value="about" className="p-4 mt-2 rounded-md border bg-accent-200 text-text">
                 <h3 className="text-xl font-semibold mb-2">About this campaign</h3>
-                <p className="text-muted-foreground whitespace-pre-line">
+                <p className="text-text-600 whitespace-pre-line">
                   {campaign.description}
                 </p>
               </TabsContent>
               
-              <TabsContent value="documents" className="p-4 mt-2 rounded-md border bg-card">
+              <TabsContent value="documents" className="p-4 mt-2 rounded-md border bg-accent-200 text-text">
                 <h3 className="text-xl font-semibold mb-4">Documents</h3>
                 {campaign.documents && campaign.documents.length > 0 ? (
                   <div className="space-y-2">
@@ -556,16 +556,16 @@ const CampaignDetail = () => {
                       >
                         <File className="h-5 w-5 text-primary" />
                         <span className="flex-1 truncate">Document {index + 1}</span>
-                        <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                        <LinkIcon className="h-4 w-4 text-text-600" />
                       </a>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No documents available for this campaign.</p>
+                  <p className="text-text-600 ">No documents available for this campaign.</p>
                 )}
               </TabsContent>
               
-              <TabsContent value="videos" className="p-4 mt-2 rounded-md border bg-card">
+              <TabsContent value="videos" className="p-4 mt-2 rounded-md border bg-accent-200 text-text">
                 <h3 className="text-xl font-semibold mb-4">Videos</h3>
                 {campaign.videos && campaign.videos.length > 0 ? (
                   <div className="space-y-4">
@@ -582,7 +582,7 @@ const CampaignDetail = () => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No videos available for this campaign.</p>
+                  <p className="text-text-600 ">No videos available for this campaign.</p>
                 )}
               </TabsContent>
             </Tabs>
@@ -591,26 +591,26 @@ const CampaignDetail = () => {
           {/* Right Column - Donation Info and Actions */}
           <div className="space-y-6">
             {/* Campaign Stats Card */}
-            <Card>
+            <Card className="bg-accent-200 text-text">
               <CardContent className="p-6 space-y-6">
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Raised so far</span>
+                    <span className="text-sm text-text-600">Raised so far</span>
                     <span className="font-semibold">{formatEthAmount(realTimeAmountCollected)} / {formatEthAmount(campaign.target)}</span>
                   </div>
                   <Progress value={realTimeProgress} className="h-2" />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col items-center justify-center p-3 rounded-md bg-muted/50">
+                  <div className="flex flex-col items-center justify-center p-3 rounded-md bg-secondary-300 text-text">
                     <Users className="h-5 w-5 text-primary mb-1" />
-                    <span className="text-xs text-muted-foreground">Donors</span>
+                    <span className="text-xs text-text-600">Donors</span>
                     <span className="font-semibold">{campaign.donors.length}</span>
                   </div>
                   
-                  <div className="flex flex-col items-center justify-center p-3 rounded-md bg-muted/50">
+                  <div className="flex flex-col items-center justify-center p-3 rounded-md bg-secondary-300 text-text">
                     <Calendar className="h-5 w-5 text-primary mb-1" />
-                    <span className="text-xs text-muted-foreground">Time left</span>
+                    <span className="text-xs text-text-600">Time left</span>
                     <span className="font-semibold text-center">{calculateTimeRemaining(campaign.deadline)}</span>
                   </div>
                 </div>
@@ -630,7 +630,7 @@ const CampaignDetail = () => {
                         onChange={(e) => setDonationAmount(e.target.value)}
                         className="w-full"
                       />
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-text-600">
                         Maximum donation: {formatEthAmount(calculateRemainingAmount(campaign.amountCollected, campaign.target))}
                       </div>
                     </div>
@@ -648,7 +648,7 @@ const CampaignDetail = () => {
                 
                 {!isCompleted && !campaign.isVerified && !hasVoted && (
                   <div className="border-t pt-4 mt-4 space-y-2">
-                    <p className="text-sm text-muted-foreground mb-2">
+                    <p className="text-sm text-text-600 mb-2">
                       Verify this campaign if you believe it's legitimate
                     </p>
                     <div className="grid grid-cols-2 gap-2">
@@ -674,7 +674,7 @@ const CampaignDetail = () => {
                 
                 {hasVoted && (
                   <div className="border-t pt-4 mt-4">
-                    <p className="text-sm text-center text-muted-foreground">
+                    <p className="text-sm text-center text-text-600">
                       You have already voted on this campaign
                     </p>
                   </div>

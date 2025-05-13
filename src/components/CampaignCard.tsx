@@ -229,7 +229,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
 
   return (
     <Link to={`/campaign/${campaign.id}`}>
-      <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg border-gray-200 dark:border-gray-800 h-full bg-card text-card-foreground">
+      <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg border-gray-200 dark:border-gray-800 h-full bg-secondary-50 text-card-foreground">
         <div className="aspect-video w-full overflow-hidden relative">
           <img 
             src={campaign.image || '/placeholder.svg'} 
@@ -248,7 +248,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
           )}
         </div>
         
-        <CardHeader className="p-4 pb-0">
+        <CardHeader className="p-4 pb-0 ">
           <div className="flex justify-between items-start">
             <CardTitle className="text-lg truncate">{campaign.title}</CardTitle>
             {isCompleted ? (

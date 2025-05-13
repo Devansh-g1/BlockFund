@@ -290,7 +290,7 @@ const CreateCampaign = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-[#e8dfec] to-[#c6afd0] dark:bg-gradient-to-br dark:from-[#1a1320] dark:to-[#131320]">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -314,7 +314,7 @@ const CreateCampaign = () => {
         </button>
         
         <div className="max-w-3xl mx-auto">
-          <Card className="border-border shadow-md">
+          <Card className="border-border shadow-md bg-accent-50 text-text">
             <CardHeader className="text-center">
               <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-indigo-500 bg-clip-text text-transparent">Create New Campaign</CardTitle>
               <CardDescription>
@@ -472,7 +472,7 @@ const CreateCampaign = () => {
                           onChange={handleImageChange}
                           className="hidden"
                         />
-                        <div className="border border-dashed border-border rounded-lg p-4 text-center bg-muted/20 hover:bg-muted/40 transition cursor-pointer">
+                        <div className="border border-dashed border-border rounded-lg p-4 text-center bg-secondary-100 hover:bg-muted/40 transition cursor-pointer">
                           <label htmlFor="image" className="cursor-pointer block p-4">
                             {image ? (
                               <div className="space-y-2">
@@ -516,7 +516,7 @@ const CreateCampaign = () => {
                         <FileText className="h-4 w-4 mr-2 text-primary" />
                         Verification Documents
                       </Label>
-                      <div className="mt-1">
+                      <div className="mt-1 bg-secondary-100">
                         <FileUploader
                           id="documents"
                           label="Upload documents to verify your campaign"
@@ -536,7 +536,7 @@ const CreateCampaign = () => {
                         <Film className="h-4 w-4 mr-2 text-primary" />
                         Campaign Videos
                       </Label>
-                      <div className="mt-1">
+                      <div className="mt-1 bg-secondary-100">
                         <FileUploader
                           id="videos"
                           label="Upload videos about your campaign"
@@ -555,7 +555,7 @@ const CreateCampaign = () => {
                     <Button
                       type="submit"
                       disabled={submitting}
-                      className="w-full bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
+                      className="w-full bg-primary-400 to-primary-800 hover:from-primary-400 hover:to-primary-800 text-text"
                     >
                       {submitting ? (
                         <>

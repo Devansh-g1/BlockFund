@@ -93,11 +93,13 @@ const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-background/90 backdrop-blur-md border-b border-border">
+    <header className="sticky top-0 z-50 w-full bg-bg opacity-80 border-b border-border">
+
+
       <div className="container flex items-center justify-between h-16 mx-auto px-4">
         <Link to="/" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-md flex items-center justify-center">
-            <span className="text-white font-bold">BF</span>
+            <span className="text-text font-bold">BF</span>
           </div>
           <span className="text-xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
             BlockFund
@@ -105,10 +107,10 @@ const Header = () => {
         </Link>
 
         <nav className="hidden md:flex items-center space-x-6">
-          <Link to="/" className="text-foreground hover:text-primary font-medium">
+          <Link to="/" className="text-text hover:text-text font-medium">
             Campaigns
           </Link>
-          <Link to="/about" className="text-foreground hover:text-primary font-medium">
+          <Link to="/about" className="text-text hover:text-text font-medium">
             About
           </Link>
         </nav>
@@ -118,7 +120,7 @@ const Header = () => {
             <Button 
               variant="outline" 
               size="sm" 
-              className="hidden sm:flex items-center gap-2"
+              className="hidden sm:flex items-center gap-2 text-text"
               onClick={() => navigate('/create-campaign')}
             >
               <Plus className="h-4 w-4" />
@@ -130,7 +132,7 @@ const Header = () => {
             variant="ghost" 
             size="icon" 
             onClick={toggleTheme}
-            className="text-foreground hover:bg-accent"
+            className="text-text hover:bg-accent text-text"
           >
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
@@ -181,7 +183,7 @@ const Header = () => {
               {/* Wallet connection status */}
               {isConnected ? (
                 <div className="flex items-center space-x-3">
-                  <span className="hidden md:block text-sm font-medium text-foreground">
+                  <span className="hidden md:block text-sm font-medium text-text">
                     {parseFloat(balance).toFixed(4)} ETH
                   </span>
                   <Button 
@@ -190,7 +192,7 @@ const Header = () => {
                     className="hidden sm:flex items-center gap-1"
                   >
                     {isSuperVerified && (
-                      <span className="bg-green-500 text-white text-xs px-1 rounded">Gov</span>
+                      <span className="bg-green-500 text-text text-xs px-1 rounded">Gov</span>
                     )}
                     {truncateAddress(address || '')}
                   </Button>
@@ -199,7 +201,7 @@ const Header = () => {
                 <Button 
                   onClick={handleConnectWallet} 
                   variant="default" 
-                  className="bg-primary hover:bg-primary/90"
+                  className="bg-primary hover:bg-primary/90 text-text"
                 >
                   <Wallet className="mr-2 h-4 w-4" />
                   Connect Wallet
@@ -210,7 +212,7 @@ const Header = () => {
             <Button 
               onClick={() => navigate('/auth')} 
               variant="default" 
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 text-text"
             >
               <LogIn className="mr-2 h-4 w-4" />
               Sign In

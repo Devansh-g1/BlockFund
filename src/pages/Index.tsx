@@ -107,26 +107,26 @@ const Index = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
+    <div className="min-h-screen bg-gradient-to-br from-[#e8dfec] to-[#c6afd0] dark:bg-gradient-to-br dark:from-[#1a1320] dark:to-[#131320]">      
+    <Header />
       
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <input
             type="text"
             placeholder="Search campaigns..."
-            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring focus:border-indigo-500"
+            className="w-full px-4 py-2 border border-accent-200 rounded-md focus:outline-none bg-secondary-100 text-text focus:ring focus:border-indigo-500"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         
         {loading ? (
-          <div className="flex justify-center items-center h-48">
+          <div className="flex justify-center items-center h-48 ">
             <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ">
             {filteredCampaigns.map(campaign => (
               <CampaignCard key={campaign.id} campaign={campaign} />
             ))}
