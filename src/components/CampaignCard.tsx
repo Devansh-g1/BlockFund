@@ -133,6 +133,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({ campaign }) => {
         variant: 'default'
       });
     } catch (error: any) {
+      console.error("Verification vote error:", error);
       toast({
         title: 'Voting Error',
         description: error.message,

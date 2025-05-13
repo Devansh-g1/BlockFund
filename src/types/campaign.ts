@@ -1,6 +1,5 @@
-
 export interface Campaign {
-  id: number;
+  id: string | number;
   owner: string;
   title: string;
   description: string;
@@ -13,8 +12,9 @@ export interface Campaign {
   donors: string[];
   donations: string[];
   isVerified: boolean;
-  isCompleted: boolean;  // Updated to be non-optional
-  creatorName: string;   // Updated to be non-optional
+  isCompleted: boolean;
+  creatorName: string;
+  originalId?: string; // Original UUID from Supabase
 }
 
 export interface CampaignFormData {

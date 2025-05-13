@@ -207,7 +207,10 @@ const CreateCampaign = () => {
         })
         .select()
         .single();
-      
+        const uuid = campaignData?.id; // UUID from Supabase
+        const campaignIdBytes32 = uuidToBytes32(uuid);
+
+        
       if (campaignError) {
         console.error('Supabase Error:', campaignError);
         throw new Error('Error saving campaign to database: ' + campaignError.message);
@@ -223,22 +226,34 @@ const CreateCampaign = () => {
         });
         
         try {
-          // Convert ETH to Wei
+          // Validate target
+          if (isNaN(Number(values.target))) {
+            throw new Error("Target must be a numeric value in ETH");
+          }
+        
           const targetInWei = ethers.utils.parseEther(values.target);
-          
-          // Convert deadline to UNIX timestamp
           const deadlineTimestamp = dateToTimestamp(values.deadline);
-          
-          // Create campaign transaction
+        
+          const documentUrlsArray = Array.isArray(documentUrls) ? documentUrls : [documentUrls];
+          const videoUrlsArray = Array.isArray(videoUrls) ? videoUrls : [videoUrls];
+          console.log("imageUrl", imageUrl); // Should log a single string
+          console.log("documentUrlsArray", documentUrlsArray); // Should be: ["url1", "url2"]
+          console.log("videoUrlsArray", videoUrlsArray);       // Same here
+          const singleImageUrl = Array.isArray(imageUrl) ? imageUrl[0] : imageUrl;  // Get the first image URL if it's an array
+          console.log("single ",singleImageUrl)
+
           const transaction = await contract.createCampaign(
+            campaignIdBytes32,
             values.title,
             values.description,
             targetInWei,
             deadlineTimestamp,
-            imageUrl,
-            documentUrls,
-            videoUrls
+            singleImageUrl, // not imageUrlArray
+            documentUrlsArray,
+            videoUrlsArray
           );
+        
+        
           
           // Wait for transaction to be mined
           await transaction.wait();
@@ -563,3 +578,10 @@ const CreateCampaign = () => {
 };
 
 export default CreateCampaign;
+function uuidToBytes32(uuid: string): string {
+  const cleanUuid = uuid.replace(/-/g, ''); // remove dashes
+  const hexUuid = '0x' + cleanUuid;         // add 0x prefix
+  return ethers.utils.hexZeroPad(hexUuid, 32);
+}
+
+

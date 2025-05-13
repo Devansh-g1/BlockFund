@@ -1,4 +1,3 @@
-
 import { ethers } from 'ethers';
 import { Campaign } from '../types/campaign';
 
@@ -26,7 +25,8 @@ export const formatCampaign = (campaign: any, id: number): Campaign => {
     ) || [],
     isVerified: campaign.isVerified,
     isCompleted: campaign.isCompleted || false,
-    creatorName: ''  // This will be populated separately
+    creatorName: '',  // This will be populated separately
+    originalId: '' // This will store the original UUID from Supabase
   };
 };
 
@@ -169,4 +169,51 @@ export const sanitizeDonationAmount = (amount: string | number): string => {
   }
   
   throw new Error("Invalid donation amount");
+};
+
+/**
+ * Convert UUID to bytes32 for blockchain use
+ * @param uuid UUID string
+ * @returns bytes32 hex string
+ */
+export const uuidToBytes32 = (uuid: string): string => {
+  if (!uuid) return '0x0000000000000000000000000000000000000000000000000000000000000000';
+  const cleanUuid = uuid.replace(/-/g, ''); // remove dashes
+  const hexUuid = '0x' + cleanUuid;         // add 0x prefix
+  return ethers.utils.hexZeroPad(hexUuid, 32);
+};
+
+/**
+ * Format campaign ID based on its type
+ * @param id Campaign ID (string or number)
+ * @returns Formatted ID
+ */
+export const formatCampaignId = (id: string | number): string => {
+  // If it's already a UUID format with dashes, return as is
+  if (typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return id;
+  }
+  
+  // If it's a bytes32 hex string (from blockchain), convert to string number
+  if (typeof id === 'string' && id.startsWith('0x')) {
+    return id;
+  }
+  
+  // For numeric IDs (from older implementation), convert to string
+  return id.toString();
+};
+
+/**
+ * Check if campaign is verified based on verification votes
+ * @param verificationVotes Array of verification votes
+ * @returns Boolean indicating if campaign should be considered verified
+ */
+export const checkCampaignVerification = (verificationVotes: {is_verified: boolean}[]): boolean => {
+  if (!verificationVotes || verificationVotes.length === 0) return false;
+  
+  const totalVotes = verificationVotes.length;
+  const verifiedVotes = verificationVotes.filter(vote => vote.is_verified).length;
+  
+  // Campaign is verified if at least 50% of votes are positive
+  return verifiedVotes * 2 >= totalVotes;
 };

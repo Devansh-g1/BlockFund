@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import type { MetaMaskInpageProvider } from '@metamask/providers';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import BlockFundABI from '../contracts/BlockFundABI.json';
+import BlockFundABI from '../blockfund/contracts/BlockFundABI.json';
 
 // Define the type for the Ethereum object on window
 declare global {
@@ -13,7 +13,7 @@ declare global {
 }
 
 // Contract details - would be deployed to Holesky testnet
-const CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000'; // Replace with actual contract address after deployment
+const CONTRACT_ADDRESS = "0x2beb05b5316937a8878c85a444bb69e489507bf5"; // Replace with actual contract address after deployment
 
 // Types for our context
 interface Web3ContextType {

@@ -113,7 +113,7 @@ const CampaignDetail = () => {
         totalCollected = donationsData.reduce((sum, donation) => sum + parseFloat(donation.amount.toString()), 0);
       }
       
-      if (totalCollected !== parseFloat(campaignData.amount_collected)) {
+      if (totalCollected !== (campaignData.amount_collected)) {
         console.log(`Updating amount_collected from ${campaignData.amount_collected} to ${totalCollected}`);
         
         try {
@@ -131,9 +131,15 @@ const CampaignDetail = () => {
           console.error('Failed to update campaign amount:', updateErr);
         }
       }
-      
+      function uuidToBytes32(uuid: string): string {
+        const cleanUuid = uuid.replace(/-/g, ''); // remove dashes
+        const hexUuid = '0x' + cleanUuid;         // add 0x prefix
+        return ethers.utils.hexZeroPad(hexUuid, 32);
+      }
+      const uuid = campaignData?.id; // UUID from Supabase
+      const campaignIdBytes32 = uuidToBytes32(uuid);
       const formattedCampaign: Campaign = {
-        id: parseInt(id),
+        id: campaignIdBytes32,
         owner: campaignData.creator_id,
         title: campaignData.title,
         description: campaignData.description,
@@ -202,10 +208,11 @@ const CampaignDetail = () => {
       }
       
       // Validate and format the donation amount
-      let donationInEth: string;
+      let donationInEth;
+      
       try {
         donationInEth = sanitizeDonationAmount(donationAmount);
-      } catch (error: any) {
+      } catch (error) {
         toast({
           title: 'Invalid donation',
           description: error.message || 'Please enter a valid donation amount greater than 0',
@@ -257,21 +264,25 @@ const CampaignDetail = () => {
       const amountInWei = ethers.utils.parseEther(donationInEth);
       console.log(`Amount in Wei: ${amountInWei.toString()}`);
       
-      // Call the contract's donateToCampaign function
+      // Send donation to the campaign through the contract
+      console.log(`Donating ${donationInEth} ETH to campaign ${campaign.id}`);
+      
+      // Make the transaction
       const tx = await contract.donateToCampaign(campaign.id, {
         value: amountInWei
       });
       
       toast({
         title: 'Transaction submitted',
-        description: 'Please confirm the transaction in MetaMask',
+        description: 'Please confirm the transaction in your wallet',
         variant: 'default'
       });
       
       // Wait for the transaction to be mined
-      await tx.wait();
+      const receipt = await tx.wait();
+      console.log('Transaction receipt:', receipt);
       
-      // Insert donation record
+      // Insert donation record in Supabase
       const { error: donationError } = await supabase
         .from('donations')
         .insert({
@@ -282,10 +293,10 @@ const CampaignDetail = () => {
       
       if (donationError) {
         console.error('Error saving donation:', donationError);
-        throw new Error('Failed to save donation');
+        throw new Error('Failed to save donation record');
       }
       
-      // Update campaign total
+      // Update campaign total in Supabase
       const newTotal = parseFloat(campaign.amountCollected) + donationAmountValue;
       const { error: updateError } = await supabase
         .from('campaigns')
@@ -294,12 +305,12 @@ const CampaignDetail = () => {
       
       if (updateError) {
         console.error('Error updating campaign amount:', updateError);
-        throw new Error('Failed to update campaign');
+        throw new Error('Failed to update campaign amount');
       }
       
       // Update UI with string values for consistency
       setRealTimeAmountCollected(newTotal.toString());
-      setRealTimeProgress(calculateProgress(newTotal.toString(), campaign.target));
+      setRealTimeProgress(calculateProgress(newTotal, parseFloat(campaign.target)));
       
       toast({
         title: 'Donation successful',
@@ -309,7 +320,7 @@ const CampaignDetail = () => {
       
       // Refresh campaign details
       fetchCampaignDetails();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Donation error:', error);
       toast({
         title: 'Donation failed',
@@ -322,7 +333,7 @@ const CampaignDetail = () => {
   };
 
   // Function to vote on campaign verification
-  const handleVerificationVote = async (vote: boolean) => {
+  const handleVerificationVote = async (vote) => {
     try {
       if (!campaign || !id) return;
       
@@ -333,6 +344,7 @@ const CampaignDetail = () => {
       
       // Get user authentication info
       const { data: userData } = await supabase.auth.getUser();
+      
       if (!userData || !userData.user) {
         toast({
           title: 'Authentication required',
@@ -362,11 +374,11 @@ const CampaignDetail = () => {
       // Insert verification vote
       const { error } = await supabase
         .from('campaign_verifications')
-        .insert({
+        .insert([{
           campaign_id: id,
           voter_id: userData.user.id,
           is_verified: vote
-        });
+        }]);
       
       if (error) {
         throw error;
@@ -382,7 +394,7 @@ const CampaignDetail = () => {
       
       // Refresh campaign details to update verification status
       fetchCampaignDetails();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Verification vote error:', error);
       toast({
         title: 'Vote failed',
@@ -411,7 +423,7 @@ const CampaignDetail = () => {
           variant: 'default'
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Share error:', error);
       if (error.name !== 'AbortError') {
         toast({

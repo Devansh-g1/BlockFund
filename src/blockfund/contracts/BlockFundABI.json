@@ -1,4 +1,3 @@
-
 [
   {
     "inputs": [],
@@ -10,12 +9,12 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "campaignId",
-        "type": "uint256"
+        "type": "bytes32"
       }
     ],
-    "name": "CampaignVerified",
+    "name": "CampaignCompleted",
     "type": "event"
   },
   {
@@ -23,9 +22,9 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "id",
-        "type": "uint256"
+        "type": "bytes32"
       },
       {
         "indexed": true,
@@ -60,6 +59,19 @@
     "inputs": [
       {
         "indexed": true,
+        "internalType": "bytes32",
+        "name": "campaignId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "CampaignVerified",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "creator",
         "type": "address"
@@ -73,9 +85,9 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "campaignId",
-        "type": "uint256"
+        "type": "bytes32"
       },
       {
         "indexed": true,
@@ -114,8 +126,32 @@
         "type": "uint256"
       }
     ],
+    "name": "campaignIds",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
     "name": "campaigns",
     "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
       {
         "internalType": "address payable",
         "name": "owner",
@@ -155,6 +191,11 @@
         "internalType": "bool",
         "name": "isVerified",
         "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "isCompleted",
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -162,6 +203,11 @@
   },
   {
     "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_id",
+        "type": "bytes32"
+      },
       {
         "internalType": "string",
         "name": "_title",
@@ -201,9 +247,9 @@
     "name": "createCampaign",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "",
-        "type": "uint256"
+        "type": "bytes32"
       }
     ],
     "stateMutability": "nonpayable",
@@ -212,9 +258,9 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "_id",
-        "type": "uint256"
+        "type": "bytes32"
       }
     ],
     "name": "donateToCampaign",
@@ -224,10 +270,28 @@
   },
   {
     "inputs": [],
+    "name": "getCampaignIds",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "getCampaigns",
     "outputs": [
       {
         "components": [
+          {
+            "internalType": "bytes32",
+            "name": "id",
+            "type": "bytes32"
+          },
           {
             "internalType": "address payable",
             "name": "owner",
@@ -287,6 +351,11 @@
             "internalType": "bool",
             "name": "isVerified",
             "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "isCompleted",
+            "type": "bool"
           }
         ],
         "internalType": "struct BlockFund.Campaign[]",
@@ -300,9 +369,9 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "_id",
-        "type": "uint256"
+        "type": "bytes32"
       }
     ],
     "name": "getDonors",
@@ -341,6 +410,19 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_id",
+        "type": "bytes32"
+      }
+    ],
+    "name": "markCampaignCompleted",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "numberOfCampaigns",
     "outputs": [
@@ -351,32 +433,6 @@
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_id",
-        "type": "uint256"
-      }
-    ],
-    "name": "verifyCampaign",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_creator",
-        "type": "address"
-      }
-    ],
-    "name": "verifyCreator",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -396,6 +452,32 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_id",
+        "type": "bytes32"
+      }
+    ],
+    "name": "verifyCampaign",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_creator",
+        "type": "address"
+      }
+    ],
+    "name": "verifyCreator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ]

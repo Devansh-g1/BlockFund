@@ -1,10 +1,9 @@
-
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.9;
 
 contract BlockFund {
-    // Struct to represent a campaign
     struct Campaign {
+        bytes32 id;
         address payable owner;
         string title;
         string description;
@@ -20,44 +19,35 @@ contract BlockFund {
         bool isCompleted;
     }
 
-    // Mapping from campaign ID to Campaign
-    mapping(uint256 => Campaign) public campaigns;
-    
-    // Total number of campaigns
+    mapping(bytes32 => Campaign) public campaigns;
+    bytes32[] public campaignIds;
     uint256 public numberOfCampaigns = 0;
-    
-    // Mapping of verified campaign creators
     mapping(address => bool) public verifiedCreators;
-    
-    // Admin address
     address public admin;
-    
-    // Events
-    event CampaignCreated(uint256 indexed id, address indexed owner, string title, uint256 target, uint256 deadline);
-    event DonationMade(uint256 indexed campaignId, address indexed donor, uint256 amount);
+
+    event CampaignCreated(bytes32 indexed id, address indexed owner, string title, uint256 target, uint256 deadline);
+    event DonationMade(bytes32 indexed campaignId, address indexed donor, uint256 amount);
     event CreatorVerified(address indexed creator);
-    event CampaignVerified(uint256 indexed campaignId);
-    event CampaignCompleted(uint256 indexed campaignId);
-    
-    // Constructor
+    event CampaignVerified(bytes32 indexed campaignId);
+    event CampaignCompleted(bytes32 indexed campaignId);
+
     constructor() {
         admin = msg.sender;
-        verifiedCreators[admin] = true; // Admin is verified by default
+        verifiedCreators[admin] = true;
     }
-    
-    // Modifiers
+
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin can perform this action");
         _;
     }
-    
+
     modifier onlyVerifiedCreator() {
         require(verifiedCreators[msg.sender], "Only verified creators can perform this action");
         _;
     }
 
-    // Function to create a campaign
     function createCampaign(
+        bytes32 _id,
         string memory _title,
         string memory _description,
         uint256 _target,
@@ -65,13 +55,14 @@ contract BlockFund {
         string memory _image,
         string[] memory _documents,
         string[] memory _videos
-    ) public onlyVerifiedCreator returns (uint256) {
-        Campaign storage campaign = campaigns[numberOfCampaigns];
-        
-        // Validation
+    ) public onlyVerifiedCreator returns (bytes32) {
+        require(campaigns[_id].owner == address(0), "Campaign ID already exists");
         require(_deadline > block.timestamp, "Deadline must be in the future");
         require(_target > 0, "Target amount must be greater than 0");
-        
+
+        Campaign storage campaign = campaigns[_id];
+
+        campaign.id = _id;
         campaign.owner = payable(msg.sender);
         campaign.title = _title;
         campaign.description = _description;
@@ -83,85 +74,79 @@ contract BlockFund {
         campaign.videos = _videos;
         campaign.isVerified = false;
         campaign.isCompleted = false;
-        
+
+        campaignIds.push(_id);
         numberOfCampaigns++;
-        
-        emit CampaignCreated(numberOfCampaigns - 1, msg.sender, _title, _target, _deadline);
-        
-        return numberOfCampaigns - 1;
+
+        emit CampaignCreated(_id, msg.sender, _title, _target, _deadline);
+        return _id;
     }
-    
-    // Function to donate to a campaign
-    function donateToCampaign(uint256 _id) public payable {
+
+    function donateToCampaign(bytes32 _id) public payable {
         Campaign storage campaign = campaigns[_id];
-        
+
         require(campaign.deadline > block.timestamp, "Campaign deadline has passed");
         require(!campaign.isCompleted, "Campaign is already completed");
         require(msg.value > 0, "Donation amount must be greater than 0");
-        
-        // Check if donation would exceed the target
+
         uint256 remainingAmount = campaign.target - campaign.amountCollected;
         require(msg.value <= remainingAmount, "Donation exceeds the remaining target amount");
-        
+
         campaign.donors.push(msg.sender);
         campaign.donations.push(msg.value);
         
-        (bool sent,) = campaign.owner.call{value: msg.value}("");
-        require(sent, "Failed to send Ether");
-        
+        // IMPORTANT: Update the amount collected BEFORE sending ETH to prevent reentrancy attacks
         campaign.amountCollected += msg.value;
-        
-        // Check if campaign is now completed
+
+        // Send ETH directly to the campaign owner
+        (bool sent, ) = campaign.owner.call{value: msg.value}("");
+        require(sent, "Failed to send Ether");
+
         if (campaign.amountCollected >= campaign.target) {
             campaign.isCompleted = true;
             emit CampaignCompleted(_id);
         }
-        
+
         emit DonationMade(_id, msg.sender, msg.value);
     }
-    
-    // Function to get donors of a campaign
-    function getDonors(uint256 _id) public view returns (address[] memory, uint256[] memory) {
+
+    function getDonors(bytes32 _id) public view returns (address[] memory, uint256[] memory) {
         return (campaigns[_id].donors, campaigns[_id].donations);
     }
-    
-    // Function to get all campaigns
+
     function getCampaigns() public view returns (Campaign[] memory) {
-        Campaign[] memory allCampaigns = new Campaign[](numberOfCampaigns);
-        
-        for(uint i = 0; i < numberOfCampaigns; i++) {
-            allCampaigns[i] = campaigns[i];
+        Campaign[] memory allCampaigns = new Campaign[](campaignIds.length);
+        for (uint i = 0; i < campaignIds.length; i++) {
+            allCampaigns[i] = campaigns[campaignIds[i]];
         }
-        
         return allCampaigns;
     }
-    
-    // Admin function to verify a creator
+
     function verifyCreator(address _creator) public onlyAdmin {
         verifiedCreators[_creator] = true;
         emit CreatorVerified(_creator);
     }
-    
-    // Admin function to verify a campaign
-    function verifyCampaign(uint256 _id) public onlyAdmin {
+
+    function verifyCampaign(bytes32 _id) public onlyAdmin {
         campaigns[_id].isVerified = true;
         emit CampaignVerified(_id);
     }
-    
-    // Function to check if a user is a verified creator
+
     function isVerifiedCreator(address _user) public view returns (bool) {
         return verifiedCreators[_user];
     }
 
-    // Function to mark a campaign as completed
-    function markCampaignCompleted(uint256 _id) public {
+    function markCampaignCompleted(bytes32 _id) public {
         Campaign storage campaign = campaigns[_id];
-        
-        // Can be marked as completed if deadline passed or target reached
-        require(block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target, 
-                "Campaign cannot be marked as completed yet");
-        
+        require(
+            block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target,
+            "Campaign cannot be marked as completed yet"
+        );
         campaign.isCompleted = true;
         emit CampaignCompleted(_id);
+    }
+
+    function getCampaignIds() public view returns (bytes32[] memory) {
+        return campaignIds;
     }
 }

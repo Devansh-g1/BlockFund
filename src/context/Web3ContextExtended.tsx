@@ -121,6 +121,21 @@ export const Web3ContextExtendedProvider: React.FC<{ children: React.ReactNode }
     try {
       // Implementation for donation-based voting would go here
       // For now, we'll just show a toast message
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) throw new Error('User not authenticated');
+      
+      // Format campaign ID to ensure it's a string
+      
+      const { error } = await supabase
+        .from('campaign_verifications')
+        .insert({
+          campaign_id: campaignId,
+          voter_id: user.id,
+          is_verified: isVerified
+        });
+        
+      if (error) throw error;
       toast({
         title: 'Vote Registered',
         description: `Your vote to ${isVerified ? 'verify' : 'reject'} this campaign has been registered.`,

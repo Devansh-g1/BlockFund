@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '@/context/Web3Context';
 import { Campaign } from '@/types/campaign';
@@ -6,7 +5,7 @@ import CampaignCard from '@/components/CampaignCard';
 import Header from '@/components/Header';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateProgress } from '@/utils/contractUtils';
+import { calculateProgress, checkCampaignVerification } from '@/utils/contractUtils';
 
 const Index = () => {
   const { address, isConnected, connectWallet } = useWeb3();
@@ -21,43 +20,85 @@ const Index = () => {
   const fetchCampaigns = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch campaigns from Supabase
+      const { data: campaignsData, error } = await supabase
         .from('campaigns')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching campaigns:', error);
+        return;
       }
 
-      if (data) {
-        const formattedCampaigns = data.map(campaignData => formatCampaignFromSupabase(campaignData));
-        setCampaigns(formattedCampaigns);
-      }
+      // Process each campaign
+      const processedCampaigns = await Promise.all(campaignsData.map(async (campaignData) => {
+        // Fetch verification votes for this campaign
+        const { data: verificationVotes } = await supabase
+          .from('campaign_verifications')
+          .select('is_verified')
+          .eq('campaign_id', campaignData.id);
+          
+        // Determine verification status based on votes
+        const shouldBeVerified = checkCampaignVerification(verificationVotes || []);
+        
+        // Fetch creator profile
+        const { data: creatorProfile } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', campaignData.creator_id)
+          .single();
+        
+        // Fetch donations
+        const { data: donations } = await supabase
+          .from('donations')
+          .select('donor_id, amount')
+          .eq('campaign_id', campaignData.id);
+          
+        // Calculate total amount collected to ensure it's up to date
+        let totalCollected = 0;
+        if (donations && donations.length > 0) {
+          totalCollected = donations.reduce((sum, donation) => sum + parseFloat(donation.amount.toString()), 0);
+          
+          // Update the database if there's a discrepancy
+          if (totalCollected !== campaignData.amount_collected) {
+            await supabase
+              .from('campaigns')
+              .update({ amount_collected: totalCollected })
+              .eq('id', campaignData.id);
+              
+            campaignData.amount_collected = totalCollected;
+          }
+        }
+        
+        // Format campaign with accurate information
+        return {
+          id: campaignData.id,
+          originalId: campaignData.id.toString(),
+          owner: campaignData.creator_id,
+          title: campaignData.title,
+          description: campaignData.description,
+          target: campaignData.target_amount.toString(),
+          deadline: new Date(campaignData.deadline).getTime() / 1000,
+          amountCollected: campaignData.amount_collected.toString(),
+          image: campaignData.image_url || '',
+          documents: campaignData.documents || [],
+          videos: campaignData.videos || [],
+          donors: donations ? donations.map(d => d.donor_id) : [],
+          donations: donations ? donations.map(d => d.amount.toString()) : [],
+          isVerified: campaignData.is_verified || shouldBeVerified,
+          isCompleted: parseFloat(campaignData.amount_collected.toString()) >= parseFloat(campaignData.target_amount.toString()) || 
+                       new Date(campaignData.deadline).getTime() / 1000 < Math.floor(Date.now() / 1000),
+          creatorName: creatorProfile?.display_name || ''
+        };
+      }));
+
+      setCampaigns(processedCampaigns);
+    } catch (err) {
+      console.error('Error processing campaigns:', err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatCampaignFromSupabase = (campaignData: any): Campaign => {
-    return {
-      id: campaignData.id,
-      owner: campaignData.creator_id,
-      title: campaignData.title,
-      description: campaignData.description,
-      target: campaignData.target_amount.toString(),
-      deadline: new Date(campaignData.deadline).getTime() / 1000,
-      amountCollected: campaignData.amount_collected.toString(),
-      image: campaignData.image_url || '',
-      documents: campaignData.documents || [],
-      videos: campaignData.videos || [],
-      donors: [],
-      donations: [],
-      isVerified: campaignData.is_verified || false,
-      isCompleted: parseFloat(campaignData.amount_collected.toString()) >= parseFloat(campaignData.target_amount.toString()) || 
-                   new Date(campaignData.deadline).getTime() / 1000 < Math.floor(Date.now() / 1000),
-      creatorName: '' // Will be populated separately
-    };
   };
 
   const filteredCampaigns = campaigns.filter(campaign =>
